@@ -687,10 +687,23 @@ def screen_admin_dashboard():
 # Main Loop
 # ==============================================================================
 
+def hide_streamlit_style():
+    """מסתיר את התפריט של המפתחים ואת הפוטר של סטרים-ליט"""
+    hide_st_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            </style>
+            """
+    st.markdown(hide_st_style, unsafe_allow_html=True)
+    
 def main():
     st.set_page_config(layout="wide", page_title="ISM Pro 2025")
     apply_advanced_styling()
     init_session_state()
+    
+    hide_streamlit_style()
     
     if st.session_state['role'] == 'Admin':
         screen_admin_dashboard()
@@ -701,3 +714,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
