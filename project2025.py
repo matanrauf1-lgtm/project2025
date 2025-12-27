@@ -28,7 +28,11 @@ except ImportError:
 # --- קונפיגורציה ---
 ADMIN_USERNAME = "admin_ism"
 ADMIN_PASSWORD = "123" 
-AI_API_KEY = "AIzaSyDUcBXd7hyr0Qiwb8MzkDnr3uPINLob82k" # המפתח שלך
+if "GEMINI_KEY" in st.secrets:
+    AI_API_KEY = st.secrets["GEMINI_KEY"]
+else:
+    # מפתח דמה למקרה שאין סודות (מונע שגיאה מיידית, אבל ה-AI לא יעבוד מקומית בלי הגדרה)
+    AI_API_KEY = "PLACEHOLDER"
 AI_MODEL_NAME = "gemini-2.5-flash"
 
 # נתוני ברירת מחדל (למניעת מסך ריק)
@@ -714,4 +718,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
