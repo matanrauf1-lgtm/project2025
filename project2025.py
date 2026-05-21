@@ -629,6 +629,35 @@ def screen_admin_dashboard():
                 st.session_state['EXPERT_DATA'] = {}
                 st.session_state['JUSTIFICATIONS'] = {}
                 st.rerun()
+            import io
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                # גיליון 1: רשימת מומחים
+                df.to_excel(writer, sheet_name='מומחים', index=False)
+               
+                # גיליון 2: נימוקים (אם קיימים)
+                if st.session_state['JUSTIFICATIONS']:
+                    just_records = []
+                    for pair, justs in st.session_state['JUSTIFICATIONS'].items():
+                        for j in justs:
+                            just_records.append({
+                                'זוג גורמים': f"{pair[0]} ↔ {pair[1]}",
+                                'מומחה': j['expert'],
+                                'סמל': j['symbol'],
+                                'נימוק': j['text']
+                            })
+                    pd.DataFrame(just_records).to_excel(writer, sheet_name='נימוקים', index=False)
+                   
+                # גיליון 3: לוג החלטות AI (אם קיים)
+                if st.session_state['AI_LOG']:
+                    pd.DataFrame(st.session_state['AI_LOG']).to_excel(writer, sheet_name='לוג_AI', index=False)
+           
+            st.download_button(
+                label="📥 הורד דוח נתונים מלא ל-Excel",
+                data=buffer.getvalue(),
+                file_name=f"ISM_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.xml"
+            )
 
         st.markdown("---")
         st.subheader("ניתוח ופתרון קונפליקטים")
