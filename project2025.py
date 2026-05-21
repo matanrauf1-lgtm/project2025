@@ -676,7 +676,7 @@ def screen_admin_dashboard():
             
             st.markdown("---")
             st.markdown("### 🏆 נתונים מספריים וסיווג")
-            st.dataframe(micmac.sort_values('DP', ascending=False).style.applymap(color_micmac, subset=['Classification']), use_container_width=True)
+            st.dataframe(micmac.sort_values('DP', ascending=False).style.map(color_micmac, subset=['Classification']), use_container_width=True)
             
             drivers = micmac[micmac['Classification'].str.contains('Driving')]
             if not drivers.empty:
