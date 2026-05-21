@@ -634,8 +634,36 @@ def screen_admin_dashboard():
             with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                 # גיליון 1: רשימת מומחים
                 df.to_excel(writer, sheet_name='מומחים', index=False)
-               
-                # גיליון 2: נימוקים (אם קיימים)
+                
+                # גיליון 2: תשובות מומחים (מטריצות מלאות) - הוספנו!
+                if st.session_state['EXPERT_DATA']:
+                    all_responses = []
+                    factors = st.session_state['FACTORS']
+                    
+                    for exp_id, expert_info in st.session_state['EXPERT_DATA'].items():
+                        expert_name = expert_info['name']
+                        expert_role = expert_info['role']
+                        responses = expert_info['responses']
+                        
+                        # יצירת שורה לכל מומחה עם כל התשובות שלו
+                        row = {'שם המומחה': expert_name, 'תפקיד': expert_role}
+                        
+                        # מעבר על כל זוגות הגורמים
+                        for i in range(len(factors)):
+                            for j in range(i+1, len(factors)):
+                                f_i, f_j = factors[i], factors[j]
+                                # קבלת התשובה או 'O' כברירת מחדל
+                                answer = responses.get(f_i, {}).get(f_j, 'O')
+                                col_name = f"{f_i} → {f_j}"
+                                row[col_name] = answer
+                        
+                        all_responses.append(row)
+                    
+                    # שמירה כטבלה רחבה ונוחה
+                    if all_responses:
+                        pd.DataFrame(all_responses).to_excel(writer, sheet_name='תשובות_מומחים', index=False)
+                
+                # גיליון 3: נימוקים (אם קיימים)
                 if st.session_state['JUSTIFICATIONS']:
                     just_records = []
                     for pair, justs in st.session_state['JUSTIFICATIONS'].items():
@@ -647,17 +675,17 @@ def screen_admin_dashboard():
                                 'נימוק': j['text']
                             })
                     pd.DataFrame(just_records).to_excel(writer, sheet_name='נימוקים', index=False)
-                   
-                # גיליון 3: לוג החלטות AI (אם קיים)
+                    
+                # גיליון 4: לוג החלטות AI (אם קיים)
                 if st.session_state['AI_LOG']:
                     pd.DataFrame(st.session_state['AI_LOG']).to_excel(writer, sheet_name='לוג_AI', index=False)
-           
+            
             st.download_button(
-                label="📥 הורד דוח נתונים מלא ל-Excel",
+                label="📥 הורד דוח נתונים מלא ל-Excel (כולל תשובות)",
                 data=buffer.getvalue(),
                 file_name=f"ISM_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.xml"
-            )
+            )             
 
         st.markdown("---")
         st.subheader("ניתוח ופתרון קונפליקטים")
