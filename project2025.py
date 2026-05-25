@@ -785,13 +785,6 @@ def screen_admin_dashboard():
             ])
 
             with ai_tools[0]:
-                # כפתור ניקוי צ'אט
-                c1, c2 = st.columns([4, 1])
-                with c2:
-                    if st.button("🗑️ נקה היסטוריה"):
-                        st.session_state["ai_chat_history"] = []
-                        st.rerun()
-                
                 _render_ai_chat()
             with ai_tools[1]:
                 _render_ai_report_generator()
@@ -822,36 +815,36 @@ def _call_gemini_with_context(prompt, extra_context=""):
         return f"❌ שגיאת תקשורת עם ה-AI: {str(e)}"
 
 def _render_ai_chat():
-    """צ'אט אינטראקטיבי עם זיכרון, סדר הפוך וניקוי"""
+    """פונקציה יחידה ומלאה לניהול הצ'אט (כפתורים, לוגיקה ותצוגה)"""
+    
+    # 1. וידוא שהרשימה קיימת
     if "ai_chat_history" not in st.session_state:
         st.session_state["ai_chat_history"] = []
 
-    # --- כפתור ניקוי צ'אט ---
+    # 2. כפתור מחיקה (למעלה)
     col_btn, _ = st.columns([5, 1])
     with col_btn:
-        if st.button("🗑️ נקה היסטוריית צ'אט"):
+        if st.button("🗑️ נקה היסטוריית צ'אט", key="clear_chat_btn"):
             st.session_state["ai_chat_history"] = []
             st.rerun()
-            
-    # --- הצגת הודעות בסדר הפוך (החדש ביותר למעלה) ---
-    # הפונקציה reversed() הופכת את הרשימה כך שההודעה האחרונה תצויר ראשונה
-    for msg in reversed(st.session_state["ai_chat_history"]):
-        # שימוש ב-markdown במקום write לתמיכה טובה יותר בפורמט והטמעת HTML אם קיים
-        st.chat_message(msg["role"]).markdown(msg["content"], unsafe_allow_html=True)
 
-    # --- קלט משתמש ---
+    # 3. קליטת קלט המשתמש
     if prompt := st.chat_input("שאל שאלה על הגורמים, המתודולוגיה, או בקש המלצות..."):
-        # 1. הוסף וצייר את הודעת המשתמש
+        # הוספת הודעת המשתמש
         st.session_state["ai_chat_history"].append({"role": "user", "content": prompt})
-        st.chat_message("user").markdown(prompt, unsafe_allow_html=True)
         
-        # 2. קבל תשובה מה-AI
+        # קבלת תשובת ה-AI מיד (באותו ריצה)
         with st.chat_message("assistant"):
-            with st.spinner(" ה-AI מנתח את נתוני הפרויקט..."):
-                # קריאה לפונקציה הכללית שמוגדרת אצלך
+            with st.spinner("🤖 ה-AI מנתח את נתוני הפרויקט..."):
                 reply = _call_gemini_with_context(prompt)
                 st.markdown(reply, unsafe_allow_html=True)
+                # הוספת תשובת ה-AI
                 st.session_state["ai_chat_history"].append({"role": "assistant", "content": reply})
+
+    # 4. הצגת ההודעות בסדר הפוך (החדש ביותר למעלה)
+    # השימוש ב-reversed מבטיח שההודעה האחרונה שנוספה תוצג ראשונה
+    for msg in reversed(st.session_state.get("ai_chat_history", [])):
+        st.chat_message(msg["role"]).markdown(msg["content"], unsafe_allow_html=True)
 
 def _render_ai_report_generator():
     """מחולל דוח אסטרטגי אוטומטי"""
