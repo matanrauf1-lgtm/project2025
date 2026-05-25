@@ -187,6 +187,16 @@ def apply_advanced_styling():
             direction: ltr !important;
             text-align: left !important;
         }
+        /* === הפיכת סדר הודעות הצ'אט - חדש למעלה === */
+        div[data-testid="stChatMessageContainer"] {
+            display: flex;
+            flex-direction: column-reverse !important;
+        }
+        
+        /* וידוא שהצ'אט יישאר יציב */
+        .stChatMessage {
+            order: 0;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -780,6 +790,12 @@ def screen_admin_dashboard():
             ])
 
             with ai_tools[0]:
+             # כפתור ניקוי צ'אט
+                c1, c2 = st.columns([4, 1])
+                 with c2:
+                     if st.button("🗑️ נקה היסטוריה"):
+                           st.session_state["ai_chat_history"] = []
+                           st.rerun()
                 _render_ai_chat()
             with ai_tools[1]:
                 _render_ai_report_generator()
@@ -787,7 +803,8 @@ def screen_admin_dashboard():
                 _render_ai_data_validator()
             with ai_tools[3]:
                 st.info("💡 **מדריך הוספת כלי AI חדש:**\n1. הוסף שם חדש לרשימת `ai_tools` למעלה.\n2. צור פונקציה `_render_your_tool()`.\n3. קרא לה בתוך `with ai_tools[N]: _render_your_tool()`.\n4. השתמש בפונקציה `_call_gemini_with_context(prompt)` לשליחת הבקשה.")
-
+            with ai_tools[4]:
+                
 def _call_gemini_with_context(prompt, extra_context=""):
     """פונקציה מרכזית לבקשות AI עם הקשר אוטומטי של הפרויקט"""
     try:
