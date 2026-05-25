@@ -791,7 +791,7 @@ def screen_admin_dashboard():
 
             with ai_tools[0]:
              # כפתור ניקוי צ'אט
-                c1, c2 = st.columns([4, 1])
+                 c1, c2 = st.columns([4, 1])
                  with c2:
                      if st.button("🗑️ נקה היסטוריה"):
                            st.session_state["ai_chat_history"] = []
