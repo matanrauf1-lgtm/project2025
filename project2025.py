@@ -169,6 +169,24 @@ def apply_advanced_styling():
             font-size: 1.2rem;
             font-weight: bold;
         }
+        /* === תיקון כיוון טקסט חכם לצ'אט ה-AI (עברית) === */
+        div[data-testid="stChatMessage"] {
+            direction: rtl !important;
+            text-align: right !important;
+            unicode-bidi: plaintext; /* מזהה אוטומטית כיוון פסקה לפי התו הראשון */
+        }
+        div[data-testid="stChatMessage"] .stMarkdown,
+        div[data-testid="stChatMessage"] p {
+            direction: rtl !important;
+            text-align: right !important;
+        }
+        /* וידוא שבלוקי קוד, טבלאות ומספרים נשארים LTR תקינים */
+        div[data-testid="stChatMessage"] pre,
+        div[data-testid="stChatMessage"] code,
+        div[data-testid="stChatMessage"] table {
+            direction: ltr !important;
+            text-align: left !important;
+        }
     </style>
     """, unsafe_allow_html=True)
 
