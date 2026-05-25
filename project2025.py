@@ -803,7 +803,7 @@ def screen_admin_dashboard():
                 _render_ai_data_validator()
             with ai_tools[3]:
                 st.info("💡 **מדריך הוספת כלי AI חדש:**\n1. הוסף שם חדש לרשימת `ai_tools` למעלה.\n2. צור פונקציה `_render_your_tool()`.\n3. קרא לה בתוך `with ai_tools[N]: _render_your_tool()`.\n4. השתמש בפונקציה `_call_gemini_with_context(prompt)` לשליחת הבקשה.")
-            with ai_tools[4]:
+           
                 
 def _call_gemini_with_context(prompt, extra_context=""):
     """פונקציה מרכזית לבקשות AI עם הקשר אוטומטי של הפרויקט"""
