@@ -502,10 +502,10 @@ def _render_expert_advisor_panel():
     factors_count = len(st.session_state['FACTORS'])
     st.info(f"📊 **בסיס ניתוח נוכחי:** נושא: '{topic}' | מספר גורמים: {factors_count}")
 
-    if st.button("🔍 הפק המלצות למומחים (על בסיס הגדרות קיימות)"):
+    # 🛠️ הוספנו key ייחודי למניעת התנגשות מזהים
+    if st.button("🔍 הפק המלצות למומחים (על בסיס הגדרות קיימות)", key="btn_expert_advisor_tab1"):
         with st.spinner("🤖 מנתח נתונים קיימים..."):
             factors = st.session_state['FACTORS']
-            # שולחים את הנושא אם קיים, אחרת רק גורמים
             topic_ctx = st.session_state.get('TOPIC', '')
             if not topic_ctx: topic_ctx = None
             
