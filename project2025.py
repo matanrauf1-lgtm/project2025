@@ -814,29 +814,74 @@ def screen_admin_dashboard():
 
 
     # --- טאב 4: מרכז AI מתקדם (יחיד ומודולרי) ---
+        # --- טאב 4: מרכז AI מתקדם (עם תת-ניווט) ---
     with tab4:
-        if not API_AVAILABLE or "PLACEHOLDER" in AI_API_KEY:
-            st.error("⚠️ מפתח ה-Gemini API אינו פעיל. אנא הגדר `GEMINI_KEY` ב-st.secrets או ישירות בקוד כדי להפעיל את מרכז ה-AI.")
-        else:
-            st.header("🧠 מרכז כוח AI & אוטומציה חכמה")
-            st.markdown("כל יכולות הבינה המלאכותית מרוכזות כאן. המערכת טוענת אוטומטית את נתוני הפרויקט הנוכחי להקשר מלא.")
+        st.header("🧠 מרכז כוח AI & אוטומציה חכמה")
+        st.markdown("כל יכולות הבינה המלאכותית מרוכזות כאן. המערכת טוענת אוטומטית את נתוני הפרויקט הנוכחי להקשר מלא.")
+        
+        # סימולציה של תתי-טאבים (ניווט פנימי)
+        sub_tools = [
+            "🎯 יועץ AI לבחירת מומחים", 
+            "💬 צ'אט חכם עם הקשר פרויקט", 
+            "📝 מחולל דוח אסטרטגי", 
+            "🔍 בדיקת איכות נתונים"
+        ]
+        
+        # יצירת תפריט בחירה אופקי שמתפקד כתת-טאב
+        active_tool = st.radio(
+            "בחר כלי לשימוש:",
+            options=sub_tools,
+            horizontal=True,
+            label_visibility="collapsed",
+            index=0
+        )
+        
+        st.markdown("---")
+        
+        # לוגיקת הצגה לפי הבחירה
+        if active_tool == "🎯 יועץ AI לבחירת מומחים":
+            _render_expert_advisor_panel()
+            _show_saved_expert_recommendations()
             
-            # מבנה תת-טאבים לכלי AI (קל להוסיף עוד בעתיד)
-            ai_tools = st.tabs([
-                "💬 צ'אט חכם עם הקשר פרויקט", 
-                "📝 מחולל דוח אסטרטגי", 
-                "🔍 בדיקת איכות תשובות מומחים", 
-                "➕ תבנית להוספת כלי חדש"
-            ])
-
-            with ai_tools[0]:
-                _render_ai_chat()
-            with ai_tools[1]:
-                _render_ai_report_generator()
-            with ai_tools[2]:
-                _render_ai_data_validator()
-            with ai_tools[3]:
-                st.info("💡 **מדריך הוספת כלי AI חדש:**\n1. הוסף שם חדש לרשימת `ai_tools` למעלה.\n2. צור פונקציה `_render_your_tool()`.\n3. קרא לה בתוך `with ai_tools[N]: _render_your_tool()`.\n4. השתמש בפונקציה `_call_gemini_with_context(prompt)` לשליחת הבקשה.")
+        elif active_tool == " צ'אט חכם עם הקשר פרויקט":
+            if "ai_chat_history" not in st.session_state:
+                st.session_state["ai_chat_history"] = []
+            for msg in st.session_state["ai_chat_history"]:
+                st.chat_message(msg["role"]).write(msg["content"])
+                
+            if prompt := st.chat_input("שאל שאלה על הגורמים, המתודולוגיה, או בקש המלצות לשיפור המערכת..."):
+                st.session_state["ai_chat_history"].append({"role": "user", "content": prompt})
+                st.chat_message("user").write(prompt)
+                with st.chat_message("assistant"):
+                    with st.spinner("🤖 מעבד בקשה עם הקשר פרויקט..."):
+                        reply = _call_gemini_with_context(prompt)
+                        st.write(reply)
+                        st.session_state["ai_chat_history"].append({"role": "assistant", "content": reply})
+                        
+        elif active_tool == " מחולל דוח אסטרטגי":
+            st.markdown("#### 📄 מחולל דוח ניתוח אסטרטגי")
+            report_type = st.selectbox("בחר סוג דוח", ["דוח מנהלים תמציתי", "דוח טכני מפורט", "המלצות התערבות אופטימליות"])
+            if st.button("צור דוח עכשיו"):
+                with st.spinner("📝 כותב דוח מקצועי..."):
+                    prompt = f"כתוב {report_type} עבור מערכת ה-ISM הנוכחית. כלול: תקציר מנהלים, גורמי מפתח (Drivers), אזהרות סיכון, והמלצות מעשיות להשקעת משאבים."
+                    report = _call_gemini_with_context(prompt, extra_context=f"סוג הדוח המבוקש: {report_type}")
+                    st.success("✅ הדוח חולל בהצלחה!")
+                    st.download_button("📥 הורד כקובץ טקסט", report, file_name="ISM_AI_Report.txt", mime="text/plain")
+                    st.markdown("---")
+                    st.text_area("תצוגה מקדימה של הדוח:", report, height=300)
+                    
+        elif active_tool == "🔍 בדיקת איכות נתונים":
+            st.markdown("#### 🔍 ניתוח איכות ואמינות תשובות מומחים")
+            st.write("ה-AI ינתח את דפוסי התשובות של המומחים, יזהה סתירות פנימיות, ויחזיר דוח אובייקטיבי.")
+            if st.button("הפעל בדיקת איכות נתונים"):
+                if not st.session_state['EXPERT_DATA']:
+                    st.warning("️ אין נתוני מומחים לניתוח. אנא אסוף תשובות תחילה.")
+                else:
+                    with st.spinner("🔍 מנתח עקביות והיגיון מערכתי..."):
+                        prompt = "נתח את איכות התשובות שנאספו מהמומחים. זהה: 1. סתירות לוגיות בין מומחים שונים. 2. גורמים שזכו להסכמה גורפת. 3. המלצות לשיפור איסוף הנתונים או ניסוח השאלות. החזר תשובה מובנית עם נקודות."
+                        validation_report = _call_gemini_with_context(prompt, extra_context="נתוני מומחים קיימים במערכת. נתח דפוסים ואיכות.")
+                        st.success("✅ ניתוח האיכות הושלם!")
+                        st.markdown(validation_report)
            
                 
 def _call_gemini_with_context(prompt, extra_context=""):
