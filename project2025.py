@@ -282,6 +282,8 @@ def init_session_state():
     if 'AI_LOG' not in st.session_state:
         st.session_state['AI_LOG'] = []
         
+    if 'TOPIC' not in st.session_state: 
+        st.session_state['TOPIC'] = ""
         
         
  # ==============================================================================
@@ -491,25 +493,26 @@ def _call_gemini_expert_recommendation(factors, problem_context=""):
     return response.text
 
 def _render_expert_advisor_panel():
-    st.markdown("### 🎯 יועץ AI לבחירת מומחים")
-    st.write("המערכת תנתח את הגורמים ותמליץ אילו בעלי מקצוע כדאי לגייס לשאלון.")
+    """הצגת פאנל יועץ המומחים בטאב 1"""
+    st.markdown("### 💡 טיפ מהיר: מי צריך למלא את השאלון?")
+    st.write("ה-AI מנתח אוטומטית את **נושא הבעיה** ו**גורמי המערכת** שהגדרת בטאב זה, וממליץ על מומחים רלוונטיים.")
     
-    problem_ctx = st.text_input("תאר בקצרה את הבעיה הארגונית (אופציונלי)", 
-                                placeholder="לדוגמה: צמצום תאונות דרכים באזור תעשייה")
-    
-    if st.button("🔍 קבל המלצות למומחים נדרשים"):
-        with st.spinner("🤖 מנתח גורמים ומתאים מומחים..."):
-            try:
-                factors = st.session_state['FACTORS']
-                recommendation = _call_gemini_expert_recommendation(factors, problem_ctx)
-                st.success("✅ ההמלצות חוללו בהצלחה!")
-                st.markdown(recommendation)
-                
-                if st.button("💾 שמור המלצות כרשימת יעד"):
-                    st.session_state['EXPERT_RECOMMENDATIONS'] = recommendation
-                    st.toast("ההמלצות נשמרו בזיכרון המערכת")
-            except Exception as e:
-                st.error(f"שגיאה בהפקת המלצות: {e}")
+    # הצגת הקשר נוכחי לויזואליות
+    topic = st.session_state.get('TOPIC', 'לא הוגדר')
+    factors_count = len(st.session_state['FACTORS'])
+    st.info(f"📊 **בסיס ניתוח נוכחי:** נושא: '{topic}' | מספר גורמים: {factors_count}")
+
+    if st.button("🔍 הפק המלצות למומחים (על בסיס הגדרות קיימות)"):
+        with st.spinner("🤖 מנתח נתונים קיימים..."):
+            factors = st.session_state['FACTORS']
+            # שולחים את הנושא אם קיים, אחרת רק גורמים
+            topic_ctx = st.session_state.get('TOPIC', '')
+            if not topic_ctx: topic_ctx = None
+            
+            recommendation = _call_gemini_expert_recommendation(factors, topic_ctx)
+            st.session_state['EXPERT_RECOMMENDATIONS'] = recommendation
+            st.success("✅ ההמלצות חוללו!")
+            st.markdown(recommendation)
 
 def _show_saved_expert_recommendations():
     if 'EXPERT_RECOMMENDATIONS' in st.session_state:
@@ -659,19 +662,35 @@ def screen_admin_dashboard():
     tab1, tab2, tab3, tab4 = st.tabs(["📝 הגדרות שאלון", "📊 מעקב וניתוח", "📈 תוצאות סופיות", "🤖 מרכז AI מתקדם"])
     
     # --- טאב 1: הגדרות ---
+        # --- טאב 1: הגדרות ---
     with tab1:
+        st.subheader("📌 הגדרת הבעיה והמערכת")
+        
+        # 1. שדה חדש לנושא הבעיה
+        topic_input = st.text_input(
+            "נושא הבעיה / ההקשר הארגוני", 
+            value=st.session_state.get('TOPIC', ''), 
+            placeholder="לדוגמה: שיפור בטיחות באתרי בנייה, ייעול תהליכי מיון..."
+        )
+        
+        st.markdown("---")
+        
+        # 2. הגורמים
         st.subheader("עריכת גורמי המערכת")
         curr = ",\n".join(st.session_state['FACTORS'])
         new_f = st.text_area("רשימת הגורמים (כל גורם מופרד בפסיק)", value=curr, height=300)
         
+        # 3. נוסח השאלה
         curr_q = st.session_state.get('GENERIC_QUESTION', DEFAULT_GENERIC_QUESTION)
         new_q = st.text_input("נוסח השאלה (השתמש ב-{i} ו-{j} כמשתנים)", value=curr_q)
         
-        if st.button("שמור ועדכן גורמים"):
+        if st.button(" שמור ועדכן הכל"):
             cleaned = [x.strip() for x in new_f.split(',') if x.strip()]
             if cleaned:
                 st.session_state['FACTORS'] = cleaned
                 st.session_state['GENERIC_QUESTION'] = new_q
+                st.session_state['TOPIC'] = topic_input # שמירת הנושא החדש
+                
                 # איפוס נתונים למניעת התנגשות
                 st.session_state['EXPERT_DATA'] = {}
                 st.session_state['JUSTIFICATIONS'] = {}
@@ -679,9 +698,11 @@ def screen_admin_dashboard():
                 st.success("הגדרות עודכנו בהצלחה! (כל הנתונים הקודמים אופסו)")
                 st.rerun()
             else: st.error("לא ניתן לשמור רשימה ריקה.")
-            st.markdown("---")
-            _render_expert_advisor_panel()
-            _show_saved_expert_recommendations()    
+
+        # יועץ AI (מוצג לאחר ההגדרות)
+        st.markdown("---")
+        _render_expert_advisor_panel()
+        _show_saved_expert_recommendations()
             
     # --- טאב 2: מעקב וניתוח ---
     with tab2:
