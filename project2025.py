@@ -473,8 +473,50 @@ def solve_conflicts_and_finalize(ssim, conflicts):
     micmac['Classification'] = micmac.apply(classify, axis=1)
     
     return final_ssim, irm, frm_df, micmac
+
+def _call_gemini_expert_recommendation(factors, problem_context=""):
+    client = genai.Client(api_key=AI_API_KEY)
+    prompt = f"""אתה יועץ אסטרטגי בכיר לניתוח מערכות מורכבות (ISM). 
+המערכת מנתחת את הבעיה: "{problem_context or 'אופטימיזציה של גורמים מערכתיים'}"
+רשימת הגורמים לניתוח: {factors}
+
+משימה: המלץ אילו סוגי מומחים/בעלי תפקידים כדאי לגייס כדי לאסוף תובנות איכותיות על הגורמים הללו.
+לכל מומחה מומלץ ציין:
+1. תפקיד/תחום מומחיות (לדוגמה: "מנהל אגף תנועה", "מומחה בטיחות בדרכים", "חוקר התנהגות נהגים")
+2. נימוק קצר (עד 15 מילים) מדוע מומחה זה רלוונטי
+3. אילו גורמים ספציפיים מהרשימה הוא יכול לנתח בצורה הטובה ביותר
+
+החזר תשובה בפורמט רשימת נקודות בעברית, ללא כותרות מיותרות."""
+    response = client.models.generate_content(model=AI_MODEL_NAME, contents=prompt)
+    return response.text
+
+def _render_expert_advisor_panel():
+    st.markdown("### 🎯 יועץ AI לבחירת מומחים")
+    st.write("המערכת תנתח את הגורמים ותמליץ אילו בעלי מקצוע כדאי לגייס לשאלון.")
     
-    # ==============================================================================
+    problem_ctx = st.text_input("תאר בקצרה את הבעיה הארגונית (אופציונלי)", 
+                                placeholder="לדוגמה: צמצום תאונות דרכים באזור תעשייה")
+    
+    if st.button("🔍 קבל המלצות למומחים נדרשים"):
+        with st.spinner("🤖 מנתח גורמים ומתאים מומחים..."):
+            try:
+                factors = st.session_state['FACTORS']
+                recommendation = _call_gemini_expert_recommendation(factors, problem_ctx)
+                st.success("✅ ההמלצות חוללו בהצלחה!")
+                st.markdown(recommendation)
+                
+                if st.button("💾 שמור המלצות כרשימת יעד"):
+                    st.session_state['EXPERT_RECOMMENDATIONS'] = recommendation
+                    st.toast("ההמלצות נשמרו בזיכרון המערכת")
+            except Exception as e:
+                st.error(f"שגיאה בהפקת המלצות: {e}")
+
+def _show_saved_expert_recommendations():
+    if 'EXPERT_RECOMMENDATIONS' in st.session_state:
+        with st.expander("📋 הצג המלצות מומחים שמורות"):
+            st.markdown(st.session_state['EXPERT_RECOMMENDATIONS'])    
+            
+# ==============================================================================
 # IV. מסכים (Screens)
 # ==============================================================================
 
@@ -637,6 +679,10 @@ def screen_admin_dashboard():
                 st.success("הגדרות עודכנו בהצלחה! (כל הנתונים הקודמים אופסו)")
                 st.rerun()
             else: st.error("לא ניתן לשמור רשימה ריקה.")
+
+            st.markdown("---")
+            _render_expert_advisor_panel()
+            _show_saved_expert_recommendations()
 
     # --- טאב 2: מעקב וניתוח ---
     with tab2:
