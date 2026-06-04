@@ -493,26 +493,36 @@ def _call_gemini_expert_recommendation(factors, problem_context=""):
     return response.text
 
 def _render_expert_advisor_panel():
-    """הצגת פאנל יועץ המומחים בטאב 1"""
-    st.markdown("### 💡 טיפ מהיר: מי צריך למלא את השאלון?")
-    st.write("ה-AI מנתח אוטומטית את **נושא הבעיה** ו**גורמי המערכת** שהגדרת בטאב זה, וממליץ על מומחים רלוונטיים.")
+    """
+    פאנל יועץ מומחים - גרסה הרמטית למניעת התנגשויות ID/Key ב-Streamlit.
+    כולל הגנה מובנית נגד רינדור כפול באותו מחזור סקריפט.
+    """
+    # מזהה ייחודי גלובלי - ודא שרצף זה לא מופיע בשום מקום אחר בקובץ
+    _WIDGET_KEY = "btn_expert_advisor_hermetic_final_v4"
     
-    # הצגת הקשר נוכחי לויזואליות
+    # מניעת רינדור כפול: אם הווידג'ט כבר רונדר במחזור הנוכחי, צא מהפונקציה
+    if st.session_state.get("_advisor_panel_render_guard") is True:
+        return
+        
+    st.markdown("### 💡 טיפ מהיר: מי צריך למלא את השאלון?")
+    st.write("ה-AI מנתח אוטומטית את **נושא הבעיה** ו**גורמי המערכת** שהגדרת.")
+    
     topic = st.session_state.get('TOPIC', 'לא הוגדר')
     factors_count = len(st.session_state['FACTORS'])
     st.info(f"📊 **בסיס ניתוח נוכחי:** נושא: '{topic}' | מספר גורמים: {factors_count}")
 
-    # 🛠️ הוספנו key ייחודי למניעת התנגשות מזהים
-    if st.button(" הפק המלצות למומחים (על בסיס הגדרות קיימות)"):
+    # יצירת הכפתור עם מזהה ייחודי מוחלט
+    if st.button("🔍 הפק המלצות למומחים (על בסיס הגדרות קיימות)", key=_WIDGET_KEY):
         with st.spinner("🤖 מנתח נתונים קיימים..."):
             factors = st.session_state['FACTORS']
             topic_ctx = st.session_state.get('TOPIC', '')
-            if not topic_ctx: topic_ctx = None
-            
-            recommendation = _call_gemini_expert_recommendation(factors, topic_ctx)
+            recommendation = _call_gemini_expert_recommendation(factors, topic_ctx if topic_ctx else None)
             st.session_state['EXPERT_RECOMMENDATIONS'] = recommendation
             st.success("✅ ההמלצות חוללו!")
             st.markdown(recommendation)
+            
+    # שחרור מנעול הרינדור לסוף המחזור
+    st.session_state["_advisor_panel_render_guard"] = True
 
 def _show_saved_expert_recommendations():
     if 'EXPERT_RECOMMENDATIONS' in st.session_state:
