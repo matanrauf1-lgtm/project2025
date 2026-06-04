@@ -503,7 +503,7 @@ def _render_expert_advisor_panel():
     st.info(f"📊 **בסיס ניתוח נוכחי:** נושא: '{topic}' | מספר גורמים: {factors_count}")
 
     # 🛠️ הוספנו key ייחודי למניעת התנגשות מזהים
-    if st.button("🔍 הפק המלצות למומחים (על בסיס הגדרות קיימות)", key="btn_expert_advisor_tab1"):
+    if st.button(" הפק המלצות למומחים (על בסיס הגדרות קיימות)"):
         with st.spinner("🤖 מנתח נתונים קיימים..."):
             factors = st.session_state['FACTORS']
             topic_ctx = st.session_state.get('TOPIC', '')
