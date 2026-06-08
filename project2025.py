@@ -608,11 +608,130 @@ def _call_with_rate_limit_handling(client, prompt, max_retries=3):
                 raise Exception(f"שגיאת API: {str(e)}")
     
     raise Exception("שגיאה לא ידועה לאחר כל הניסיונות")
+
+import time
+import random
+from google.genai.errors import APIError
+
+def _call_api_with_retry(client, prompt, max_retries=5, base_delay=10):
+    """
+    מבצע קריאה ל-Gemini API עם טיפול חכם בשגיאות משאבים.
     
+    Args:
+        client: לקוח Gemini
+        prompt: הבקשה ל-AI
+        max_retries: מספר מקסימלי של ניסיונות
+        base_delay: זמן המתנה בסיסי בין ניסיונות (שניות)
+    
+    Returns:
+        תגובת ה-API
+    
+    Raises:
+        Exception: אם כל הניסיונות נכשלו
+    """
+    for attempt in range(max_retries):
+        try:
+            # יצירת קונפיגורציה עם Google Search
+            config = {"tools": [{"google_search": {}}]}
+            
+            # ביצוע הקריאה ל-API
+            response = client.models.generate_content(
+                model=AI_MODEL_NAME, 
+                contents=prompt,
+                config=config
+            )
+            
+            return response.text
+            
+        except Exception as e:
+            error_str = str(e).lower()
+            
+            # זיהוי סוגי שגיאות
+            is_rate_limit = 'resource_exhausted' in error_str or '429' in error_str
+            is_unavailable = 'unavailable' in error_str or '503' in error_str or 'high demand' in error_str
+            
+            if is_rate_limit or is_unavailable:
+                # חישוב זמן המתנה עם jitter (רעש אקראי למניעת התנגשויות)
+                if 'retry in' in str(e):
+                    # חילוץ זמן ההמתנה מההודעה אם קיים
+                    import re
+                    match = re.search(r'retry in (\d+\.?\d*)', str(e).lower())
+                    if match:
+                        wait_time = float(match.group(1)) + 2  # הוספת 2 שניות buffer
+                    else:
+                        wait_time = base_delay * (2 ** attempt) + random.uniform(1, 3)
+                else:
+                    # המתנה אקספוננציאלית עם jitter
+                    wait_time = base_delay * (2 ** attempt) + random.uniform(1, 3)
+                
+                # הגבלת זמן המתנה מקסימלי ל-120 שניות
+                wait_time = min(wait_time, 120)
+                
+                if attempt < max_retries - 1:
+                    # הצגת הודעה למשתמש
+                    error_type = "עומס שרת" if is_unavailable else "חריגה ממכסה"
+                    st.warning(
+                        f"⏳ **שגיאת {error_type}** (ניסיון {attempt + 1}/{max_retries})\n\n"
+                        f"ממתין {wait_time:.0f} שניות לפני ניסיון חוזר...\n\n"
+                        f"💡 *שגיאות זמניות נובעות מעומס על השרתים ונפתרות לרוב לאחר המתנה*"
+                    )
+                    
+                    # התקדמות ויזואלית
+                    progress_placeholder = st.empty()
+                    progress_bar = progress_placeholder.progress(0)
+                    
+                    for i in range(int(wait_time)):
+                        progress_bar.progress((i + 1) / wait_time)
+                        time.sleep(1)
+                    
+                    progress_placeholder.empty()
+                    continue
+                else:
+                    raise Exception(
+                        f"נכשל לאחר {max_retries} ניסיונות עקב {error_type}. "
+                        f"אנא המת מספר דקות ונסה שוב, או הפחת את מספר הסוכנים."
+                    )
+            else:
+                # שגיאה אחרת - זרוק מיד
+                raise Exception(f"שגיאת API לא צפויה: {str(e)}")
+    
+    raise Exception("שגיאה לא ידועה לאחר כל הניסיונות")
+
+
+def _is_api_available_with_check():
+    """
+    בודק אם ה-API זמין לפני תחילת עבודה.
+    """
+    if not API_AVAILABLE:
+        return False, "ספריית google.genai לא מותקנת"
+    
+    if "PLACEHOLDER" in AI_API_KEY:
+        return False, "מפתח API לא הוגדר"
+    
+    try:
+        client = genai.Client(api_key=AI_API_KEY)
+        # ניסיון קריאה קלה לבדיקת זמינות
+        test_prompt = "Say 'OK' in Hebrew"
+        config = {"tools": [{"google_search": {}}]}
+        response = client.models.generate_content(
+            model=AI_MODEL_NAME,
+            contents=test_prompt,
+            config=config
+        )
+        return True, "API זמין"
+    except Exception as e:
+        error_str = str(e).lower()
+        if 'unavailable' in error_str or '503' in error_str:
+            return False, "השירות לא זמין כרגע עקב עומס. אנא המתן מספר דקות."
+        elif 'resource_exhausted' in error_str or '429' in error_str:
+            return False, "חריגה ממכסת הבקשות. אנא המתן מספר דקות."
+        else:
+            return False, f"שגיאה בבדיקת API: {str(e)}"
+
 def _simulate_synthetic_expert(role_info, factors):
     """
     שלב 2: סוכן AI ממלא מטריצת ISM עם הצדקה מבוססת גלישה באינטרנט.
-    כולל הגנה מפני Rate Limit.
+    כולל הגנה מפני Rate Limit ושגיאות שרת.
     """
     role = role_info['role']
     
@@ -645,8 +764,8 @@ def _simulate_synthetic_expert(role_info, factors):
     try:
         client = genai.Client(api_key=AI_API_KEY)
         
-        # שימוש בפונקציה עם הגנת Rate Limit
-        raw = _call_with_rate_limit_handling(client, prompt, max_retries=3)
+        # שימוש בפונקציה עם הגנת Retry
+        raw = _call_api_with_retry(client, prompt, max_retries=5, base_delay=15)
         
         match = re.search(r'\{.*\}', raw, re.DOTALL)
         if not match: 
@@ -838,6 +957,41 @@ def screen_admin_dashboard():
         st.markdown("---")
         status_icon = '✅' if API_AVAILABLE and 'PLACEHOLDER' not in AI_API_KEY else '❌'
         st.info(f"API סטטוס: {status_icon}")
+            # --- כפתור עצור ומחק (בסרגל הצדדי) ---
+        st.markdown("---")
+        st.subheader("🛑 בקרת סימולציה")
+        
+        # בדיקה אם יש נתונים סינתטיים
+        has_synth_data = any(k.startswith('Synth_') for k in st.session_state.get('EXPERT_DATA', {}))
+        
+        if has_synth_data:
+            if st.button("🗑️ מחק נתוני סוכני AI", key="btn_clear_synth_sidebar", type="secondary"):
+                st.session_state['EXPERT_DATA'] = {
+                    k: v for k, v in st.session_state['EXPERT_DATA'].items() 
+                    if not k.startswith('Synth_')
+                }
+                st.success("✅ נתוני הסוכנים נמחקו!")
+                st.rerun()
+        
+        # כפתור ביטול/עצירה (למקרה של סימולציה רצה)
+        if st.button("⏹️ עצור הכל ואפס", key="btn_stop_all_sidebar", type="primary"):
+            # נקה הכל חוץ מהגדרות בסיס
+            factors_backup = st.session_state.get('FACTORS', [])
+            topic_backup = st.session_state.get('TOPIC', '')
+            question_backup = st.session_state.get('GENERIC_QUESTION', DEFAULT_GENERIC_QUESTION)
+            
+            # איפוס מלא
+            for key in list(st.session_state.keys()):
+                if key not in ['FACTORS', 'TOPIC', 'GENERIC_QUESTION', 'role']:
+                    del st.session_state[key]
+            
+            # שחזור הגדרות
+            st.session_state['FACTORS'] = factors_backup
+            st.session_state['TOPIC'] = topic_backup
+            st.session_state['GENERIC_QUESTION'] = question_backup
+            
+            st.success("✅ המערכת אופסה בהצלחה!")
+            st.rerun()
     
     tab1, tab2, tab3, tab4 = st.tabs(["📝 הגדרות שאלון", "📊 מעקב וניתוח", "📈 תוצאות סופיות", "🤖 מרכז AI מתקדם"])
     
@@ -1017,13 +1171,14 @@ def screen_admin_dashboard():
     # --- טאב 4: יועץ AI & סוכנים סינתטיים ---
     with tab4:
         st.header("🧠 מרכז ייעוץ וסימולציה מערכתית")
+        st.info("זרימת עבודה: 1️⃣ ה-AI מנתח את הגורמים וממליץ על מומחים נדרשים → 2️⃣ הפעלת סוכני AI שימלאו את השאלון במקומם, עם נימוקים מבוססי גלישה באינטרנט.")
         
         if not API_AVAILABLE or "PLACEHOLDER" in AI_API_KEY:
-            st.error("️ מפתח API חסר או לא פעיל.")
+            st.error("⚠️ מפתח API חסר או לא פעיל. לא ניתן להפעיל מודולים אלו.")
         else:
+            # שלב 1: ייעוץ עם בחירת מספר מומחים
             st.subheader("שלב 1: הגדרת כמות וזיהוי מומחים נדרשים")
             
-            #  שדה חדש לבחירת מספר המומחים
             col1, col2 = st.columns([1, 3])
             with col1:
                 num_experts = st.number_input(
@@ -1036,60 +1191,95 @@ def screen_admin_dashboard():
                 )
             
             topic_ctx = st.session_state.get('TOPIC', 'לא הוגדר')
+            factors_ctx = st.session_state['FACTORS']
             with col2:
-                st.write(f"📌 **נושא:** `{topic_ctx}` | **גורמים:** {len(st.session_state['FACTORS'])}")
+                st.write(f"📌 **נושא:** `{topic_ctx}` | **גורמים:** {len(factors_ctx)}")
             
-            if st.button("📥 הפק המלצות למומחים", key="btn_advisor_synth_v2"):
+            if st.button("📥 הפק המלצות למומחים", key="btn_advisor_synth_v3"):
                 with st.spinner(f"🤖 מנתח ומחפש {num_experts} תפקידים מתאימים..."):
                     try:
-                        # 🆕 העברת מספר המומחים לפונקציה
-                        recs = _get_ai_expert_recommendations(topic_ctx, st.session_state['FACTORS'], num_experts)
+                        recs = _get_ai_expert_recommendations(topic_ctx, factors_ctx, num_experts)
                         st.session_state['AI_RECOMMENDED_EXPERTS'] = recs
-                        st.success(f"✅ זוהו {len(recs)} תפקידים.")
+                        st.success(f"✅ זוהו {len(recs)} תפקידי מומחים רלוונטיים.")
                     except Exception as e: 
                         st.error(f"❌ {e}")
 
+            # הצגת המלצות
             if 'AI_RECOMMENDED_EXPERTS' in st.session_state:
                 st.markdown("### 👥 המומחים המומלצים:")
                 for idx, exp in enumerate(st.session_state['AI_RECOMMENDED_EXPERTS']):
                     st.info(f"**{idx+1}. {exp['role']}** ({exp.get('expertise','')})\n💡 {exp.get('rationale','')}")
                 
                 st.markdown("---")
+                # שלב 2: סימולציה
                 st.subheader("שלב 2: הפעלת סוכני AI סינתטיים")
-                st.warning("️ הסוכנים ימלאו את השאלון במקום המומחים וינמקו בעזרת מקורות מהאינטרנט.")
+                st.warning("⚠️ הסוכנים ימלאו את השאלון במקום המומחים וינמקו בעזרת מקורות מהאינטרנט. התהליך עשוי לקחת מספר דקות.")
                 
-                if st.button("🚀 הפעל סימולציה והזן למערכת", key="btn_sim_synth_v2"):
+                if st.button("🚀 הפעל סימולציה והזן למערכת", key="btn_sim_synth_v3"):
+                    # בדיקת זמינות API לפני התחלה
+                    try:
+                        client = genai.Client(api_key=AI_API_KEY)
+                        test_prompt = "Say OK"
+                        client.models.generate_content(model=AI_MODEL_NAME, contents=test_prompt)
+                    except Exception as e:
+                        error_str = str(e).lower()
+                        if 'unavailable' in error_str or '503' in error_str:
+                            st.error("🚫 **השירות לא זמין כרגע עקב עומס.** אנא המתן 5-10 דקות ונסה שוב.")
+                            st.stop()
+                        elif 'resource_exhausted' in error_str or '429' in error_str:
+                            st.error("🚫 **חריגה ממכסת הבקשות.** אנא המתן מספר דקות לפני ניסיון נוסף.")
+                            st.stop()
+                    
                     progress = st.progress(0)
+                    status_text = st.empty()
                     experts_list = st.session_state['AI_RECOMMENDED_EXPERTS']
+                    success_count = 0
                     
                     for i, exp_role in enumerate(experts_list):
-                        status_text = st.empty()
                         status_text.text(f"🔄 מעבד סוכן {i+1}/{len(experts_list)}: {exp_role['role']}...")
                         
                         try:
-                            matrix = _simulate_synthetic_expert(exp_role, st.session_state['FACTORS'])
-                            _inject_synthetic_data(exp_role, matrix, st.session_state['FACTORS'])
+                            matrix = _simulate_synthetic_expert(exp_role, factors_ctx)
+                            _inject_synthetic_data(exp_role, matrix, factors_ctx)
+                            success_count += 1
                             
                             # השהיה בין סוכנים למניעת Rate Limit
-                            if i < len(experts_list) - 1:  # לא להמתין אחרי הסוכן האחרון
-                                st.info(f"⏳ המתנה של 15 שניות לפני הסוכן הבא למניעת חריגה ממכסה...")
-                                time.sleep(15)
+                            if i < len(experts_list) - 1:
+                                st.info(f"⏳ המתנה של 20 שניות לפני הסוכן הבא למניעת חריגה ממכסה...")
+                                time.sleep(20)
                                 
                         except Exception as e: 
-                            st.error(f"שגיאה בסוכן {exp_role['role']}: {e}")
+                            st.error(f"❌ **שגיאה בסוכן {exp_role['role']}:** {e}")
+                            if st.button("⏹️ עצור סימולציה", key=f"btn_stop_{i}"):
+                                st.warning("הסימולציה הופסקה על ידי המשתמש")
+                                break
                         
                         progress.progress((i + 1) / len(experts_list))
                     
                     progress.empty()
                     status_text.empty()
-                    st.success(f"✅ סימולציה הושלמה! {len(experts_list)} סוכנים הוזנו בהצלחה למערכת.")
-                    st.rerun()
+                    
+                    if success_count > 0:
+                        st.success(f"✅ סימולציה הושלמה! {success_count}/{len(experts_list)} סוכנים הוזנו בהצלחה למערכת.")
+                        st.info("עבור לטאב 'מעקב וניתוח' כדי לראות את המומחים החדשים ולהריץ את חישובי ה-ISM.")
+                        st.rerun()
+                    else:
+                        st.error("❌ אף סוכן לא הוזן בהצלחה. אנא בדוק את לוג השגיאות למעלה.")
                     
             # כפתור איפוס סינתטי
             if any(k.startswith('Synth_') for k in st.session_state['EXPERT_DATA']):
-                if st.button("️ מחק רק מומחים סינתטיים", key="btn_clear_synth_v2"):
-                    st.session_state['EXPERT_DATA'] = {k: v for k, v in st.session_state['EXPERT_DATA'].items() if not k.startswith('Synth_')}
-                    st.rerun()
+                st.markdown("---")
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.info(f"📊 קיימים {len([k for k in st.session_state['EXPERT_DATA'] if k.startswith('Synth_')])} מומחים סינתטיים במערכת")
+                with col_b:
+                    if st.button("🗑️ מחק רק מומחים סינתטיים", key="btn_clear_synth_v3"):
+                        st.session_state['EXPERT_DATA'] = {
+                            k: v for k, v in st.session_state['EXPERT_DATA'].items() 
+                            if not k.startswith('Synth_')
+                        }
+                        st.success("✅ נתוני הסוכנים נמחקו!")
+                        st.rerun()
            
                 
 def _call_gemini_with_context(prompt, extra_context=""):
