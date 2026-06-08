@@ -536,142 +536,70 @@ import json
 import re
 
 def _get_ai_expert_recommendations(topic, factors):
-    """שלב 1: יועץ AI מזהה אילו תפקידי מומחים נדרשים לניתוח."""
-    prompt = f"""
-אתה יועץ אסטרטגי בכיר לניתוח מערכות מורכבות (ISM-MICMAC).
-הפרויקט עוסק בנושא: "{topic or 'אופטימיזציה מערכתית'}"
-גורמי המערכת לניתוח: {factors}
-
-משימה: המלץ על 3 עד 5 תפקידי מומחים/פרסונות ארגוניות שחיוני שימלאו את שאלון ה-ISM כדי לקבל תמונה מערכתית מלאה.
-לכל מומחה ציין:
-1. שם התפקיד/תחום מומחיות (לדוגמה: "ראש אגף בטיחות", "מומחה התנהגות אנושית", "מהנדס תהליכים")
-2. תחום מומחיות קצר
-3. נימוק קצר מדוע הוא קריטי לניתוח גורמים אלו
-
-החזר אך ורק אובייקט JSON תקין בפורמט הבא (ללא טקסט נוסף):
-[
-  {{"role": "שם התפקיד", "expertise": "תחום מומחיות", "rationale": "נימוק"}},
-  ...
-]
-"""
-    try:
-        client = genai.Client(api_key=AI_API_KEY)
-        response = client.models.generate_content(model=AI_MODEL_NAME, contents=prompt)
-        raw = response.text
-        match = re.search(r'\[.*\]', raw, re.DOTALL)
-        if not match: raise ValueError("תבנית JSON לא נמצאה בתגובה")
-        return json.loads(match.group(0))
-    except Exception as e:
-        raise RuntimeError(f"כשל בייבוא המלצות מומחים: {str(e)}")
-
+    """שלב 1: ייעוץ AI לזיהוי מומחים נדרשים."""
+    prompt = f"""אתה יועץ אסטרטגי ל-ISM. נושא: "{topic}". גורמים: {factors}.
+המלץ על 3-4 תפקידי מומחים. החזר רק JSON:
+[{{"role": "שם התפקיד", "expertise": "מומחיות", "rationale": "נימוק"}}]"""
+    client = genai.Client(api_key=AI_API_KEY)
+    response = client.models.generate_content(model=AI_MODEL_NAME, contents=prompt)
+    match = re.search(r'\[.*\]', response.text, re.DOTALL)
+    if not match: return []
+    return json.loads(match.group(0))
 
 def _simulate_synthetic_expert(role_info, factors):
-    """
-    שלב 2: סוכן AI ממלא מטריצת ISM עם הצדקה מבוססת גלישה באינטרנט.
-    משתמש ב-Google Search דרך ה-API של Gemini.
-    """
+    """שלב 2: סוכן AI ממלא מטריצה עם גלישה באינטרנט."""
     role = role_info['role']
-    
-    prompt = f"""
-אתה מומחה אקדמי בכיר בתפקיד: "{role}".
-תחום המומחיות שלך: {role_info.get('expertise', 'כללי')}
-הקשר לפרויקט: {role_info.get('rationale', 'ניתוח מערכתי')}
-
-עליך לנתח את הגורמים הבאים: {factors}
-
-**חובה**: לפני שאתה עונה, השתמש בכלי החיפוש (Google Search) כדי למצוא ספרות אקדמית, מחקרים, או עובדות תעשייתיות התומכות בקשרים בין הגורמים.
-
-משימה: עבור כל זוג גורמים (i, j), קבע את סוג הקשר הישיר (V, A, X, O) וספק נימוק קצר (עד 25 מילים) המבוסס על המידע שמצאת או על היגיון מקצועי מבוסס מקורות.
-- V: גורם i משפיע ישירות על גורם j
-- A: גורם j משפיע ישירות על גורם i
-- X: השפעה הדדית
-- O: אין קשר ישיר (אין צורך בנימוק)
-
-החזר אך ורק אובייקט JSON תקין בפורמט הבא:
-{{
-  "{role}": {{
-    "Factor_i_Name": {{
-       "Factor_j_Name": {{ "relation": "V", "justification": "הנימוק המבוסס על מקורות..." }},
-       ...
-    }}
-  }}
-}}
-שים לב: החזר רק קשרים עבור i < j (חצי מטריצה עליונה). אל תחזור על עצמך. ודא שכל צירופי הגורמים מופיעים.
-"""
-    try:
-        client = genai.Client(api_key=AI_API_KEY)
-        
-        # הפעלת כלי החיפוש של גוגל
-        config = {
-            "tools": [{"google_search": {}}]
-        }
-        
-        response = client.models.generate_content(
-            model=AI_MODEL_NAME, 
-            contents=prompt,
-            config=config
-        )
-        
-        raw = response.text
-        match = re.search(r'\{.*\}', raw, re.DOTALL)
-        if not match: raise ValueError("תבנית JSON לא נמצאה")
-        
-        data = json.loads(match.group(0))
-        return data.get(role, data)
-        
-    except Exception as e:
-        raise RuntimeError(f"כשל בסימולציית הסוכן {role}: {str(e)}")
-
+    prompt = f"""אתה מומחה: "{role}". גורמים: {factors}.
+חפש באינטרנט (Google Search) וקבע קשרים (V/A/X/O) עם נימוק.
+החזר רק JSON:
+{{"{role}": {{"Factor_i": {{"Factor_j": {{"relation": "V", "justification": "..."}}}}}}}}"""
+    client = genai.Client(api_key=AI_API_KEY)
+    config = {"tools": [{"google_search": {}}]}
+    response = client.models.generate_content(model=AI_MODEL_NAME, contents=prompt, config=config)
+    match = re.search(r'\{.*\}', response.text, re.DOTALL)
+    if not match: return {}
+    data = json.loads(match.group(0))
+    return data.get(role, data)
 
 def _inject_synthetic_data(role_info, matrix_data, factors):
-    """ממיר את תגובת ה-AI (הכוללת נימוקים) למבנה ה-State הקיים ומזין אותו."""
+    """שלב 3: הזנת הנתונים ל-State בצורה שתואמת לקוד הקיים."""
+    # יצירת ID ייחודי
     synth_id = f"Synth_{len([k for k in st.session_state['EXPERT_DATA'] if k.startswith('Synth_')]) + 1}"
     
     responses = {}
-    justifications = {}
     
-    # עיבוד המטריצה שחזרה עם נימוקים
+    # עיבוד המטריצה שהוחזרה מה-AI
     for f_i in factors:
         if f_i not in matrix_data: continue
-        
         responses[f_i] = {}
         for f_j in factors:
-            # בדיקה אם יש נתון עבור הזוג הזה במבנה החדש
             pair_data = matrix_data.get(f_i, {}).get(f_j)
-            
             if not pair_data: continue
             
-            # קבלת הסימבול והנימוק
             sym = pair_data.get("relation", "O").upper()
-            reason = pair_data.get("justification", "ללא נימוק")
-            
+            reason = pair_data.get("justification", "")
             if sym not in ['V','A','X','O']: sym = 'O'
             
-            # שמירת הסימבול לתשובות
             responses[f_i][f_j] = sym
             
-            # שמירת הנימוק המדעי/מקוון לטבלת הנימוקים
-            pair = (f_i, f_j)
-            if sym != 'O': # שומרים נימוק רק אם יש קשר משמעותי
-                justifications[pair] = [{
+            # שמירת נימוקים
+            if sym != 'O' and reason:
+                pair = (f_i, f_j)
+                if pair not in st.session_state['JUSTIFICATIONS']:
+                    st.session_state['JUSTIFICATIONS'][pair] = []
+                st.session_state['JUSTIFICATIONS'][pair].append({
                     "expert": role_info['role'],
                     "symbol": sym,
-                    "text": f" מקורות AI ({role_info['role']}): {reason}"
-                }]
-            
-    # עדכון State של תשובות
+                    "text": f"🌐 מקורות AI: {reason}"
+                })
+    
+    # עדכון State - מבנה תואם בדיוק לקוד הקיים שלך
     st.session_state['EXPERT_DATA'][synth_id] = {
         'name': f"סוכן AI - {role_info['role']}",
-        'role': role_info['expertise'],
+        'role': role_info.get('expertise', 'AI Agent'),
         'responses': responses
     }
     
-    # מיזוג נימוקים ל-State הגלובלי
-    for k, v in justifications.items():
-        if k not in st.session_state['JUSTIFICATIONS']:
-            st.session_state['JUSTIFICATIONS'][k] = []
-        st.session_state['JUSTIFICATIONS'][k].extend(v)
-        
     return synth_id
     
 # ==============================================================================
@@ -989,40 +917,19 @@ def screen_admin_dashboard():
             st.info("אנא הרץ ניתוח בטאב הקודם.")
 
 
-    # --- טאב 4: מרכז AI מתקדם (יחיד ומודולרי) ---
-        # --- טאב 4: מרכז AI מתקדם (עם תת-ניווט) ---
+    # --- טאב 4: יועץ AI & סוכנים סינתטיים ---
     with tab4:
-        st.header("🧠 מרכז כוח AI & אוטומציה חכמה")
-        st.markdown("כל יכולות הבינה המלאכותית מרוכזות כאן. המערכת טוענת אוטומטית את נתוני הפרויקט הנוכחי להקשר מלא.")
+        st.header(" מרכז ייעוץ וסימולציה מערכתית")
         
-        # סימולציה של תתי-טאבים (ניווט פנימי)
-        # שנה את השורה הזו:
-        sub_tools = [
-        "🤖 יועץ מומחים וסוכנים סינתטיים", # <--- שם מעודכן ומאוחד
-        "💬 צ'אט חכם עם הקשר פרויקט", 
-        " מחולל דוח אסטרטגי", 
-        "🔍 בדיקת איכות נתונים"
-        ]
-        
-        # יצירת תפריט בחירה אופקי שמתפקד כתת-טאב
-        active_tool = st.radio(
-            "בחר כלי לשימוש:",
-            options=sub_tools,
-            horizontal=True,
-            label_visibility="collapsed",
-            index=0
-        )
-        
-        st.markdown("---")
-        
-        # לוגיקת הצגה לפי הבחירה
-        if active_tool == "🤖 יועץ מומחים וסוכנים סינתטיים":
+        if not API_AVAILABLE or "PLACEHOLDER" in AI_API_KEY:
+            st.error("⚠️ מפתח API חסר או לא פעיל.")
+        else:
             st.subheader("שלב 1: זיהוי מומחים נדרשים")
             topic_ctx = st.session_state.get('TOPIC', 'לא הוגדר')
             st.write(f"📌 **נושא:** `{topic_ctx}` | **גורמים:** {len(st.session_state['FACTORS'])}")
             
             if st.button("📥 הפק המלצות למומחים", key="btn_advisor_synth_v1"):
-                with st.spinner("🤖 מנתח ומחפש מקורות..."):
+                with st.spinner(" מנתח..."):
                     try:
                         recs = _get_ai_expert_recommendations(topic_ctx, st.session_state['FACTORS'])
                         st.session_state['AI_RECOMMENDED_EXPERTS'] = recs
@@ -1034,8 +941,7 @@ def screen_admin_dashboard():
                     st.info(f"**{idx+1}. {exp['role']}** ({exp.get('expertise','')})\n💡 {exp.get('rationale','')}")
                 
                 st.markdown("---")
-                st.subheader("שלב 2: הפעלת סוכני AI סינתטיים (עם גלישה באינטרנט)")
-                st.warning("⚠️ הסוכנים ימלאו את השאלון במקום המומחים וינמקו בעזרת מקורות מהאינטרנט.")
+                st.subheader("שלב 2: הפעלת סוכני AI סינתטיים")
                 
                 if st.button("🚀 הפעל סימולציה והזן למערכת", key="btn_sim_synth_v1"):
                     progress = st.progress(0)
@@ -1046,51 +952,12 @@ def screen_admin_dashboard():
                         except Exception as e: st.error(f"שגיאה בסוכן {exp_role['role']}: {e}")
                         progress.progress((i + 1) / len(st.session_state['AI_RECOMMENDED_EXPERTS']))
                     st.success("✅ הסוכנים הוזנו! עבור לטאב 'מעקב' לראות אותם.")
+                    st.rerun()  # <--- קריטי! מרענן את המסך
                     
             if any(k.startswith('Synth_') for k in st.session_state['EXPERT_DATA']):
                 if st.button("🗑️ מחק מומחים סינתטיים", key="btn_clear_synth_v1"):
                     st.session_state['EXPERT_DATA'] = {k: v for k, v in st.session_state['EXPERT_DATA'].items() if not k.startswith('Synth_')}
                     st.rerun()
-                    
-        elif active_tool == " צ'אט חכם עם הקשר פרויקט":
-            if "ai_chat_history" not in st.session_state:
-                st.session_state["ai_chat_history"] = []
-            for msg in st.session_state["ai_chat_history"]:
-                st.chat_message(msg["role"]).write(msg["content"])
-                
-            if prompt := st.chat_input("שאל שאלה על הגורמים, המתודולוגיה, או בקש המלצות לשיפור המערכת..."):
-                st.session_state["ai_chat_history"].append({"role": "user", "content": prompt})
-                st.chat_message("user").write(prompt)
-                with st.chat_message("assistant"):
-                    with st.spinner("🤖 מעבד בקשה עם הקשר פרויקט..."):
-                        reply = _call_gemini_with_context(prompt)
-                        st.write(reply)
-                        st.session_state["ai_chat_history"].append({"role": "assistant", "content": reply})
-                        
-        elif active_tool == " מחולל דוח אסטרטגי":
-            st.markdown("#### 📄 מחולל דוח ניתוח אסטרטגי")
-            report_type = st.selectbox("בחר סוג דוח", ["דוח מנהלים תמציתי", "דוח טכני מפורט", "המלצות התערבות אופטימליות"])
-            if st.button("צור דוח עכשיו"):
-                with st.spinner("📝 כותב דוח מקצועי..."):
-                    prompt = f"כתוב {report_type} עבור מערכת ה-ISM הנוכחית. כלול: תקציר מנהלים, גורמי מפתח (Drivers), אזהרות סיכון, והמלצות מעשיות להשקעת משאבים."
-                    report = _call_gemini_with_context(prompt, extra_context=f"סוג הדוח המבוקש: {report_type}")
-                    st.success("✅ הדוח חולל בהצלחה!")
-                    st.download_button("📥 הורד כקובץ טקסט", report, file_name="ISM_AI_Report.txt", mime="text/plain")
-                    st.markdown("---")
-                    st.text_area("תצוגה מקדימה של הדוח:", report, height=300)
-                    
-        elif active_tool == "🔍 בדיקת איכות נתונים":
-            st.markdown("#### 🔍 ניתוח איכות ואמינות תשובות מומחים")
-            st.write("ה-AI ינתח את דפוסי התשובות של המומחים, יזהה סתירות פנימיות, ויחזיר דוח אובייקטיבי.")
-            if st.button("הפעל בדיקת איכות נתונים"):
-                if not st.session_state['EXPERT_DATA']:
-                    st.warning("️ אין נתוני מומחים לניתוח. אנא אסוף תשובות תחילה.")
-                else:
-                    with st.spinner("🔍 מנתח עקביות והיגיון מערכתי..."):
-                        prompt = "נתח את איכות התשובות שנאספו מהמומחים. זהה: 1. סתירות לוגיות בין מומחים שונים. 2. גורמים שזכו להסכמה גורפת. 3. המלצות לשיפור איסוף הנתונים או ניסוח השאלות. החזר תשובה מובנית עם נקודות."
-                        validation_report = _call_gemini_with_context(prompt, extra_context="נתוני מומחים קיימים במערכת. נתח דפוסים ואיכות.")
-                        st.success("✅ ניתוח האיכות הושלם!")
-                        st.markdown(validation_report)
            
                 
 def _call_gemini_with_context(prompt, extra_context=""):
