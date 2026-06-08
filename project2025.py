@@ -564,21 +564,100 @@ def _get_ai_expert_recommendations(topic, factors, num_experts=3):
     except Exception as e:
         raise RuntimeError(f"כשל בייבוא המלצות מומחים: {str(e)}")
 
-def _simulate_synthetic_expert(role_info, factors):
-    """שלב 2: סוכן AI ממלא מטריצה עם גלישה באינטרנט."""
-    role = role_info['role']
-    prompt = f"""אתה מומחה: "{role}". גורמים: {factors}.
-חפש באינטרנט (Google Search) וקבע קשרים (V/A/X/O) עם נימוק.
-החזר רק JSON:
-{{"{role}": {{"Factor_i": {{"Factor_j": {{"relation": "V", "justification": "..."}}}}}}}}"""
-    client = genai.Client(api_key=AI_API_KEY)
-    config = {"tools": [{"google_search": {}}]}
-    response = client.models.generate_content(model=AI_MODEL_NAME, contents=prompt, config=config)
-    match = re.search(r'\{.*\}', response.text, re.DOTALL)
-    if not match: return {}
-    data = json.loads(match.group(0))
-    return data.get(role, data)
+import time
+from google.genai.errors import APIError
 
+def _call_with_rate_limit_handling(client, prompt, max_retries=3):
+    """
+    מבצע קריאה ל-Gemini API עם טיפול בשגיאות Rate Limit וניסיונות חוזרים.
+    """
+    for attempt in range(max_retries):
+        try:
+            config = {"tools": [{"google_search": {}}]}
+            response = client.models.generate_content(
+                model=AI_MODEL_NAME, 
+                contents=prompt,
+                config=config
+            )
+            return response.text
+            
+        except Exception as e:
+            error_str = str(e)
+            
+            # בדיקה אם זו שגיאת Rate Limit (429)
+            if 'RESOURCE_EXHAUSTED' in error_str or '429' in error_str:
+                # חילוץ זמן ההמתנה מההודעה
+                retry_after = 60  # ברירת מחדל: 60 שניות
+                if 'retry in' in error_str.lower():
+                    try:
+                        import re
+                        match = re.search(r'retry in (\d+\.?\d*)', error_str.lower())
+                        if match:
+                            retry_after = float(match.group(1)) + 1  # הוספת שנייה אחת
+                    except:
+                        pass
+                
+                if attempt < max_retries - 1:
+                    st.warning(f"⏳ הגענו למגבלת קצב בקשות. ממתינים {retry_after:.0f} שניות לפני ניסיון חוזר...")
+                    time.sleep(retry_after)
+                    continue
+                else:
+                    raise Exception(f"חריגה ממכסת הבקשות לאחר {max_retries} ניסיונות. אנא המת מספר דקות ונסה שוב.")
+            else:
+                # שגיאה אחרת - זרוק מיד
+                raise Exception(f"שגיאת API: {str(e)}")
+    
+    raise Exception("שגיאה לא ידועה לאחר כל הניסיונות")
+    
+def _simulate_synthetic_expert(role_info, factors):
+    """
+    שלב 2: סוכן AI ממלא מטריצת ISM עם הצדקה מבוססת גלישה באינטרנט.
+    כולל הגנה מפני Rate Limit.
+    """
+    role = role_info['role']
+    
+    prompt = f"""
+אתה מומחה אקדמי בכיר בתפקיד: "{role}".
+תחום המומחיות שלך: {role_info.get('expertise', 'כללי')}
+הקשר לפרויקט: {role_info.get('rationale', 'ניתוח מערכתי')}
+
+עליך לנתח את הגורמים הבאים: {factors}
+
+**חובה**: לפני שאתה עונה, השתמש בכלי החיפוש (Google Search) כדי למצוא ספרות אקדמית, מחקרים, או עובדות תעשייתיות התומכות בקשרים בין הגורמים.
+
+משימה: עבור כל זוג גורמים (i, j), קבע את סוג הקשר הישיר (V, A, X, O) וספק נימוק קצר (עד 25 מילים) המבוסס על המידע שמצאת או על היגיון מקצועי מבוסס מקורות.
+- V: גורם i משפיע ישירות על גורם j
+- A: גורם j משפיע ישירות על גורם i
+- X: השפעה הדדית
+- O: אין קשר ישיר (אין צורך בנימוק)
+
+החזר אך ורק אובייקט JSON תקין בפורמט הבא:
+{{
+  "{role}": {{
+    "Factor_i_Name": {{
+       "Factor_j_Name": {{ "relation": "V", "justification": "הנימוק המבוסס על מקורות..." }},
+       ...
+    }}
+  }}
+}}
+שים לב: החזר רק קשרים עבור i < j (חצי מטריצה עליונה). אל תחזור על עצמך. ודא שכל צירופי הגורמים מופיעים.
+"""
+    try:
+        client = genai.Client(api_key=AI_API_KEY)
+        
+        # שימוש בפונקציה עם הגנת Rate Limit
+        raw = _call_with_rate_limit_handling(client, prompt, max_retries=3)
+        
+        match = re.search(r'\{.*\}', raw, re.DOTALL)
+        if not match: 
+            raise ValueError("תבנית JSON לא נמצאה")
+        
+        data = json.loads(match.group(0))
+        return data.get(role, data)
+        
+    except Exception as e:
+        raise RuntimeError(f"כשל בסימולציית הסוכן {role}: {str(e)}")
+        
 def _inject_synthetic_data(role_info, matrix_data, factors):
     """שלב 3: הזנת הנתונים ל-State בצורה שתואמת לקוד הקיים."""
     # יצירת ID ייחודי
@@ -990,6 +1069,12 @@ def screen_admin_dashboard():
                         try:
                             matrix = _simulate_synthetic_expert(exp_role, st.session_state['FACTORS'])
                             _inject_synthetic_data(exp_role, matrix, st.session_state['FACTORS'])
+                            
+                            # השהיה בין סוכנים למניעת Rate Limit
+                            if i < len(experts_list) - 1:  # לא להמתין אחרי הסוכן האחרון
+                                st.info(f"⏳ המתנה של 15 שניות לפני הסוכן הבא למניעת חריגה ממכסה...")
+                                time.sleep(15)
+                                
                         except Exception as e: 
                             st.error(f"שגיאה בסוכן {exp_role['role']}: {e}")
                         
@@ -998,7 +1083,7 @@ def screen_admin_dashboard():
                     progress.empty()
                     status_text.empty()
                     st.success(f"✅ סימולציה הושלמה! {len(experts_list)} סוכנים הוזנו בהצלחה למערכת.")
-                    st.rerun()  # 🆕 רענון מיידי כדי לראות את השינוי בטאב 2
+                    st.rerun()
                     
             # כפתור איפוס סינתטי
             if any(k.startswith('Synth_') for k in st.session_state['EXPERT_DATA']):
