@@ -325,8 +325,6 @@ def solve_conflicts_and_finalize(ssim, conflicts):
         ssim.loc[fi, fj] = rec
         
     st.session_state['AI_LOG'] = ai_logs
-    st.session_state['SSIM_INIT'] = ssim.copy()  # מטריצה ראשונית עם קונפליקטים (C)
-    st.session_state['FINAL_SSIM'] = final_ssim.copy()  # מטריצה אחרי פתרון קונפליקטים
 
     final_ssim = ssim.copy()
     factors = final_ssim.index
@@ -384,7 +382,9 @@ def solve_conflicts_and_finalize(ssim, conflicts):
         return 'Autonomous (אוטונומי) 🏝️'
         
     micmac['Classification'] = micmac.apply(classify, axis=1)
-
+    st.session_state['SSIM_INIT'] = ssim.copy()  # מטריצה ראשונית עם קונפליקטים (C)
+    st.session_state['FINAL_SSIM'] = final_ssim.copy()  # מטריצה אחרי פתרון קונפליקטים
+    
     return final_ssim, irm, frm_df, micmac
 
 # ==============================================================================
