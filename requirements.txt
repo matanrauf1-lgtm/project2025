@@ -4,3 +4,5 @@ numpy
 plotly
 google-genai
 openpyxl==3.1.2
+openai
+duckduckgo-search
