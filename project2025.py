@@ -535,16 +535,34 @@ def _show_saved_expert_recommendations():
 import json
 import re
 
-def _get_ai_expert_recommendations(topic, factors):
-    """שלב 1: ייעוץ AI לזיהוי מומחים נדרשים."""
-    prompt = f"""אתה יועץ אסטרטגי ל-ISM. נושא: "{topic}". גורמים: {factors}.
-המלץ על 3-4 תפקידי מומחים. החזר רק JSON:
-[{{"role": "שם התפקיד", "expertise": "מומחיות", "rationale": "נימוק"}}]"""
-    client = genai.Client(api_key=AI_API_KEY)
-    response = client.models.generate_content(model=AI_MODEL_NAME, contents=prompt)
-    match = re.search(r'\[.*\]', response.text, re.DOTALL)
-    if not match: return []
-    return json.loads(match.group(0))
+def _get_ai_expert_recommendations(topic, factors, num_experts=3):
+    """שלב 1: יועץ AI מזהה אילו תפקידי מומחים נדרשים לניתוח."""
+    prompt = f"""
+אתה יועץ אסטרטגי בכיר לניתוח מערכות מורכבות (ISM-MICMAC).
+הפרויקט עוסק בנושא: "{topic or 'אופטימיזציה מערכתית'}"
+גורמי המערכת לניתוח: {factors}
+
+משימה: המלץ בדיוק על {num_experts} תפקידי מומחים/פרסונות ארגוניות שחיוני שימלאו את שאלון ה-ISM כדי לקבל תמונה מערכתית מלאה ומגוונת.
+לכל מומחה ציין:
+1. שם התפקיד/תחום מומחיות (לדוגמה: "ראש אגף בטיחות", "מומחה התנהגות אנושית", "מהנדס תהליכים")
+2. תחום מומחיות קצר
+3. נימוק קצר מדוע הוא קריטי לניתוח גורמים אלו
+
+החזר אך ורק אובייקט JSON תקין בפורמט הבא (ללא טקסט נוסף):
+[
+  {{"role": "שם התפקיד", "expertise": "תחום מומחיות", "rationale": "נימוק"}},
+  ...
+]
+"""
+    try:
+        client = genai.Client(api_key=AI_API_KEY)
+        response = client.models.generate_content(model=AI_MODEL_NAME, contents=prompt)
+        raw = response.text
+        match = re.search(r'\[.*\]', raw, re.DOTALL)
+        if not match: raise ValueError("תבנית JSON לא נמצאה בתגובה")
+        return json.loads(match.group(0))
+    except Exception as e:
+        raise RuntimeError(f"כשל בייבוא המלצות מומחים: {str(e)}")
 
 def _simulate_synthetic_expert(role_info, factors):
     """שלב 2: סוכן AI ממלא מטריצה עם גלישה באינטרנט."""
@@ -919,43 +937,72 @@ def screen_admin_dashboard():
 
     # --- טאב 4: יועץ AI & סוכנים סינתטיים ---
     with tab4:
-        st.header(" מרכז ייעוץ וסימולציה מערכתית")
+        st.header("🧠 מרכז ייעוץ וסימולציה מערכתית")
         
         if not API_AVAILABLE or "PLACEHOLDER" in AI_API_KEY:
-            st.error("⚠️ מפתח API חסר או לא פעיל.")
+            st.error("️ מפתח API חסר או לא פעיל.")
         else:
-            st.subheader("שלב 1: זיהוי מומחים נדרשים")
-            topic_ctx = st.session_state.get('TOPIC', 'לא הוגדר')
-            st.write(f"📌 **נושא:** `{topic_ctx}` | **גורמים:** {len(st.session_state['FACTORS'])}")
+            st.subheader("שלב 1: הגדרת כמות וזיהוי מומחים נדרשים")
             
-            if st.button("📥 הפק המלצות למומחים", key="btn_advisor_synth_v1"):
-                with st.spinner(" מנתח..."):
+            #  שדה חדש לבחירת מספר המומחים
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                num_experts = st.number_input(
+                    "מספר מומחים רצוי:", 
+                    min_value=1, 
+                    max_value=10, 
+                    value=3, 
+                    step=1,
+                    help="כמה סוכני AI תרצה שייצרו וימלאו את השאלון?"
+                )
+            
+            topic_ctx = st.session_state.get('TOPIC', 'לא הוגדר')
+            with col2:
+                st.write(f"📌 **נושא:** `{topic_ctx}` | **גורמים:** {len(st.session_state['FACTORS'])}")
+            
+            if st.button("📥 הפק המלצות למומחים", key="btn_advisor_synth_v2"):
+                with st.spinner(f"🤖 מנתח ומחפש {num_experts} תפקידים מתאימים..."):
                     try:
-                        recs = _get_ai_expert_recommendations(topic_ctx, st.session_state['FACTORS'])
+                        # 🆕 העברת מספר המומחים לפונקציה
+                        recs = _get_ai_expert_recommendations(topic_ctx, st.session_state['FACTORS'], num_experts)
                         st.session_state['AI_RECOMMENDED_EXPERTS'] = recs
                         st.success(f"✅ זוהו {len(recs)} תפקידים.")
-                    except Exception as e: st.error(f"❌ {e}")
+                    except Exception as e: 
+                        st.error(f"❌ {e}")
 
             if 'AI_RECOMMENDED_EXPERTS' in st.session_state:
+                st.markdown("### 👥 המומחים המומלצים:")
                 for idx, exp in enumerate(st.session_state['AI_RECOMMENDED_EXPERTS']):
                     st.info(f"**{idx+1}. {exp['role']}** ({exp.get('expertise','')})\n💡 {exp.get('rationale','')}")
                 
                 st.markdown("---")
                 st.subheader("שלב 2: הפעלת סוכני AI סינתטיים")
+                st.warning("️ הסוכנים ימלאו את השאלון במקום המומחים וינמקו בעזרת מקורות מהאינטרנט.")
                 
-                if st.button("🚀 הפעל סימולציה והזן למערכת", key="btn_sim_synth_v1"):
+                if st.button("🚀 הפעל סימולציה והזן למערכת", key="btn_sim_synth_v2"):
                     progress = st.progress(0)
-                    for i, exp_role in enumerate(st.session_state['AI_RECOMMENDED_EXPERTS']):
+                    experts_list = st.session_state['AI_RECOMMENDED_EXPERTS']
+                    
+                    for i, exp_role in enumerate(experts_list):
+                        status_text = st.empty()
+                        status_text.text(f"🔄 מעבד סוכן {i+1}/{len(experts_list)}: {exp_role['role']}...")
+                        
                         try:
                             matrix = _simulate_synthetic_expert(exp_role, st.session_state['FACTORS'])
                             _inject_synthetic_data(exp_role, matrix, st.session_state['FACTORS'])
-                        except Exception as e: st.error(f"שגיאה בסוכן {exp_role['role']}: {e}")
-                        progress.progress((i + 1) / len(st.session_state['AI_RECOMMENDED_EXPERTS']))
-                    st.success("✅ הסוכנים הוזנו! עבור לטאב 'מעקב' לראות אותם.")
-                    st.rerun()  # <--- קריטי! מרענן את המסך
+                        except Exception as e: 
+                            st.error(f"שגיאה בסוכן {exp_role['role']}: {e}")
+                        
+                        progress.progress((i + 1) / len(experts_list))
                     
+                    progress.empty()
+                    status_text.empty()
+                    st.success(f"✅ סימולציה הושלמה! {len(experts_list)} סוכנים הוזנו בהצלחה למערכת.")
+                    st.rerun()  # 🆕 רענון מיידי כדי לראות את השינוי בטאב 2
+                    
+            # כפתור איפוס סינתטי
             if any(k.startswith('Synth_') for k in st.session_state['EXPERT_DATA']):
-                if st.button("🗑️ מחק מומחים סינתטיים", key="btn_clear_synth_v1"):
+                if st.button("️ מחק רק מומחים סינתטיים", key="btn_clear_synth_v2"):
                     st.session_state['EXPERT_DATA'] = {k: v for k, v in st.session_state['EXPERT_DATA'].items() if not k.startswith('Synth_')}
                     st.rerun()
            
