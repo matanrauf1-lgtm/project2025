@@ -325,7 +325,9 @@ def solve_conflicts_and_finalize(ssim, conflicts):
         ssim.loc[fi, fj] = rec
         
     st.session_state['AI_LOG'] = ai_logs
-    
+    st.session_state['SSIM_INIT'] = ssim.copy()  # מטריצה ראשונית עם קונפליקטים (C)
+    st.session_state['FINAL_SSIM'] = final_ssim.copy()  # מטריצה אחרי פתרון קונפליקטים
+
     final_ssim = ssim.copy()
     factors = final_ssim.index
     for i in range(len(factors)):
@@ -597,6 +599,18 @@ def _show_saved_expert_recommendations():
         with st.expander(" הצג המלצות מומחים שמורות"):
             st.markdown(st.session_state['EXPERT_RECOMMENDATIONS'])
 
+def color_ssim_conflicts(val):
+    """צביעת תאי קונפליקט במטריצת SSIM."""
+    if val == 'C':
+        return 'background-color: #fee2e2; color: #7f1d1d; font-weight: 900;'
+    elif val == 'V':
+        return 'background-color: #dcfce7; color: #14532d;'
+    elif val == 'A':
+        return 'background-color: #dbeafe; color: #1e3a8a;'
+    elif val == 'X':
+        return 'background-color: #fef9c3; color: #713f12;'
+    return ''
+    
 # ==============================================================================
 # V. מסכים (Screens)
 # ==============================================================================
@@ -884,7 +898,35 @@ def screen_admin_dashboard():
                 frm, micmac = st.session_state['RESULTS']
                 st.success("✅ הניתוח הושלם.")
                 
+                # === הצגת מטריצות הקשרים ===
+                st.markdown("---")
+                st.subheader("📊 מטריצות קשרים (SSIM)")
+                
+                # מטריצה ראשונית (לפני פתרון קונפליקטים)
+                if 'SSIM_INIT' in st.session_state:
+                    with st.expander("🔍 מטריצת קשרים ראשונית (SSIM) - לפני פתרון קונפליקטים", expanded=False):
+                        st.info("💡 **מקרא:** V=משפיע על, A=מושפע מ, X=הדדי, O=אין קשר, **C=קונפליקט** (דורש הכרעת AI)")
+                        st.dataframe(st.session_state['SSIM_INIT'].style.map(color_ssim_conflicts), use_container_width=True)
+                        
+                        # ספירת קונפליקטים
+                        conflict_count = (st.session_state['SSIM_INIT'] == 'C').sum().sum()
+                        if conflict_count > 0:
+                            st.warning(f"⚠️ נמצאו **{conflict_count}** קונפליקטים במטריצה (סומנו ב-C)")
+                
+                # מטריצה סופית (אחרי פתרון קונפליקטים)
+                if 'FINAL_SSIM' in st.session_state:
+                    with st.expander("✅ מטריצת קשרים סופית (SSIM) - אחרי פתרון קונפליקטים", expanded=False):
+                        st.info("💡 **מקרא:** V=משפיע על, A=מושפע מ, X=הדדי, O=אין קשר")
+                        st.dataframe(st.session_state['FINAL_SSIM'], use_container_width=True)
+                
+                # מטריצת נגישות סופית (FRM)
+                with st.expander("🎯 מטריצת נגישות סופית (FRM) - עם טרנזיטיביות", expanded=False):
+                    st.info("💡 מציגה השפעות ישירות **ועקיפות** בין גורמים")
+                    st.dataframe(frm, use_container_width=True)
+                
+                # הצגת לוג ה-AI
                 if st.session_state['AI_LOG']:
+                    st.markdown("---")
                     st.markdown("### 🧠 דוח החלטות ה-AI")
                     st.dataframe(pd.DataFrame(st.session_state['AI_LOG']), use_container_width=True)
 
