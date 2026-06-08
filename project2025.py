@@ -33,7 +33,7 @@ if "GEMINI_KEY" in st.secrets:
 else:
     # מפתח דמה למקרה שאין סודות (מונע שגיאה מיידית, אבל ה-AI לא יעבוד מקומית בלי הגדרה)
     AI_API_KEY = "PLACEHOLDER"
-AI_MODEL_NAME = "gemini-1.5-flash"
+AI_MODEL_NAME = "gemini-2.0-flash"
 
 # נתוני ברירת מחדל (למניעת מסך ריק)
 DEFAULT_FACTORS = [
