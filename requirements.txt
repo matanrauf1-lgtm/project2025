@@ -1,9 +1,8 @@
-streamlit
-pandas
-numpy
-plotly
-google-genai
-openpyxl==3.1.2
-openai
-duckduckgo-search
-anthropic
+streamlit==1.66.0
+pandas==3.0.6
+numpy==2.5.4
+plotly==7.1.0
+openpyxl==3.1.5
+openai==3.36.0
+ddgs==9.16.0
+anthropic==2.0.0

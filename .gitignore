@@ -1,0 +1,6 @@
+.streamlit/secrets.toml
+__pycache__/
+*.pyc
+ism_data.db
+ism_data.db-*
+.pytest_cache/
