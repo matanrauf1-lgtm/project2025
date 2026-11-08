@@ -14,6 +14,9 @@ import os
 import hmac
 import uuid
 
+# הפקודה הראשונה של Streamlit בסקריפט, לפני כל גישה ל-st.secrets או רכיב ממשק
+st.set_page_config(page_title="ISM MICMAC Pro", page_icon="🧩")
+
 import storage
 from ism_core import (
     transitive_closure, compute_ism_levels, ism_cycle_members,
