@@ -82,7 +82,7 @@ switch ($Command) {
         if (-not (Test-Path $Py)) { Ensure-Venv }
         Set-Location $Root
         Write-Host '1/3 בדיקת תחביר'
-        & $Py -m py_compile project2025.py ism_core.py storage.py
+        & $Py -m py_compile project2025.py ism_core.py storage.py report_html.py
         if ($LASTEXITCODE) { throw 'שגיאת תחביר' }
         Write-Host '2/3 התאמת התלויות (pip check)'
         & $Py -m pip check

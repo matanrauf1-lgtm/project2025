@@ -20,7 +20,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt pytest
       - run: pip check
-      - run: python -m py_compile project2025.py ism_core.py storage.py
+      - run: python -m py_compile project2025.py ism_core.py storage.py report_html.py
       - run: pytest -q
 
   # The same image GitHub Codespaces uses (.devcontainer/devcontainer.json)

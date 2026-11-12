@@ -18,6 +18,7 @@ import uuid
 st.set_page_config(page_title="ISM MICMAC Pro", page_icon="🧩")
 
 import storage
+from report_html import collect_report_data, build_html_report
 from ism_core import (
     transitive_closure, compute_ism_levels, ism_cycle_members,
     classify_micmac, build_analysis_results,
@@ -1844,6 +1845,21 @@ def screen_admin_dashboard():
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="btn_download_excel_results"
             )
+
+            report_data = collect_report_data(
+                st.session_state['FACTORS'], st.session_state['EXPERT_DATA'], results,
+                ssim_init=st.session_state.get('SSIM_INIT'), ssim_final=st.session_state.get('FINAL_SSIM'),
+                ai_log=st.session_state['AI_LOG'], justifications=st.session_state['JUSTIFICATIONS'],
+                topic=st.session_state.get('TOPIC', ''), question=st.session_state.get('GENERIC_QUESTION', ''),
+            )
+            st.download_button(
+                label="🌐 הורד דוח HTML אינטראקטיבי (כל התוצאות הסופיות)",
+                data=build_html_report(report_data).encode('utf-8'),
+                file_name=f"ISM_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.html",
+                mime="text/html",
+                key="btn_download_html_results",
+            )
+            st.caption("קובץ אחד שנפתח בכל דפדפן, גם בלי אינטרנט: לשוניות לסיכום, היררכיה, MICMAC, מטריצות, קונפליקטים ומשיבים, עם מצב כהה והדפסה ל-PDF.")
         else:
             st.info("אנא הרץ ניתוח בטאב הקודם.")
 

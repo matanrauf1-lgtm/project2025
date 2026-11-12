@@ -12,7 +12,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY project2025.py ism_core.py storage.py ./
+COPY project2025.py ism_core.py storage.py report_html.py ./
 
 # משתמש לא-root, ותיקיית נתונים שאפשר לחבר כ-volume כדי שהמסד יישמר בין הרצות
 RUN useradd --create-home app && mkdir -p /data && chown app /data

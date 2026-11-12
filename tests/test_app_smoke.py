@@ -56,7 +56,7 @@ def test_expert_answers_reach_admin_and_analysis_runs(new_session):
     assert len(method.options) == 4
     method.set_value("katz").run()
     assert not admin.exception, admin.exception
-    assert len(admin.get("download_button")) == 2
+    assert len(admin.get("download_button")) == 3
 
 
 def test_admin_login_blocked_without_password(tmp_path, monkeypatch):
