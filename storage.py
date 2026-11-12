@@ -76,16 +76,16 @@ def save_expert(exp_id, name, role, responses, justifications=(), citations=(), 
 def load_experts(db_path=DEFAULT_DB_PATH):
     """
     מחזיר (expert_data, justifications, citations) במבנה שבו האפליקציה משתמשת:
-    expert_data = {id: {'name', 'role', 'responses'}}, justifications = {(fi, fj): [..]},
+    expert_data = {id: {'name', 'role', 'responses', 'created_at'}}, justifications = {(fi, fj): [..]},
     citations = {id: [..]}.
     """
     expert_data, justifications, citations = {}, {}, {}
     with closing(_connect(db_path)) as conn:
         rows = conn.execute(
-            "SELECT id, name, role, responses, justifications, citations FROM experts ORDER BY created_at, rowid"
+            "SELECT id, name, role, responses, justifications, citations, created_at FROM experts ORDER BY created_at, rowid"
         ).fetchall()
-    for exp_id, name, role, responses, justs, cites in rows:
-        expert_data[exp_id] = {'name': name, 'role': role, 'responses': json.loads(responses)}
+    for exp_id, name, role, responses, justs, cites, created_at in rows:
+        expert_data[exp_id] = {'name': name, 'role': role, 'responses': json.loads(responses), 'created_at': created_at}
         for j in json.loads(justs):
             pair = tuple(j.pop('pair'))
             justifications.setdefault(pair, []).append(j)

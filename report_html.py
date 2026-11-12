@@ -34,8 +34,11 @@ def _parse_votes(text):
 
 
 def collect_report_data(factors, expert_data, results, ssim_init=None, ssim_final=None, ai_log=None,
-                        justifications=None, topic="", question=""):
-    """ממיר את מצב הניתוח למבנה JSON שהדוח צורך. results הוא המילון של build_analysis_results."""
+                        justifications=None, topic="", question="", usage=None, provider=""):
+    """
+    ממיר את מצב הניתוח למבנה JSON שהדוח צורך. results הוא המילון של build_analysis_results; usage הוא מונה הצריכה
+    של המודל בתשלום בסשן (calls, input_tokens, output_tokens, cost, history).
+    """
     factors = list(factors)
     n = len(factors)
     irm, frm = results['irm'], results['frm']
@@ -50,7 +53,8 @@ def collect_report_data(factors, expert_data, results, ssim_init=None, ssim_fina
                 sym = info['responses'].get(factors[i], {}).get(factors[j], 'O')
                 counts[sym if sym in counts else 'O'] += 1
         experts.append({'name': info.get('name', exp_id), 'role': info.get('role', ''),
-                        'type': 'ai' if str(exp_id).startswith('Synth_') else 'human', 'counts': counts})
+                        'type': 'ai' if str(exp_id).startswith('Synth_') else 'human', 'counts': counts,
+                        'created': info.get('created_at') or ''})
 
     def method(key, label, unit, note, threshold=None):
         df = results[key]
@@ -90,8 +94,23 @@ def collect_report_data(factors, expert_data, results, ssim_init=None, ssim_fina
     if ssim_final is not None:
         related = sum(1 for i in range(n) for j in range(i + 1, n) if str(ssim_final.iloc[i, j]) in ('V', 'A', 'X'))
 
+    usage = usage or {}
+    created = sorted(e['created'] for e in experts if e['created'])
+    run = {
+        'provider': provider or '',
+        'calls': int(usage.get('calls', 0)),
+        'input_tokens': int(usage.get('input_tokens', 0)),
+        'output_tokens': int(usage.get('output_tokens', 0)),
+        'cost': float(usage.get('cost', 0.0)),
+        'ai_seconds': float(sum(h.get('שניות') or 0 for h in usage.get('history', []))),
+        'analysis_seconds': results.get('elapsed_s'),
+        'first_response': created[0] if created else '',
+        'last_response': created[-1] if created else '',
+    }
+
     return {
         'topic': topic or '',
+        'run': run,
         'question': question or '',
         'generated': datetime.datetime.now().strftime('%d/%m/%Y %H:%M'),
         'factors': factors,
@@ -268,6 +287,19 @@ details ul { margin: 8px 0 0; padding-inline-start: 20px; }
 .tip .r { display: flex; justify-content: space-between; gap: 14px; color: var(--ink-2); }
 .tip .r b { color: var(--ink); font-variant-numeric: tabular-nums; }
 footer { margin-top: 40px; color: var(--muted); font-size: 12.5px; text-align: center; }
+.intro-topic { margin: 0 0 8px; font-size: 17px; font-weight: 600; }
+.factor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.factor { display: flex; gap: 12px; align-items: center; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: var(--surface-2); }
+.factor .num { flex: none; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-weight: 700; font-size: 13px; background: var(--surface); color: var(--ink-2); box-shadow: 0 0 0 1px var(--border); }
+.factor .name { font-weight: 600; }
+.factor .meta { font-size: 12.5px; color: var(--ink-2); display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.method-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.method { border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: var(--surface-2); }
+.method .mh { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.method .mh b { font-size: 16px; }
+.method .en { font-size: 12px; color: var(--muted); direction: ltr; }
+.method p { margin: 6px 0 10px; color: var(--ink-2); font-size: 13.5px; }
+.method .badge { white-space: normal; border-radius: 10px; }
 .empty-state { text-align: center; color: var(--ink-2); padding: 40px 16px; }
 .empty-state .big { font-size: 34px; color: var(--good); }
 @media (max-width: 640px) {
@@ -386,11 +418,11 @@ footer { margin-top: 40px; color: var(--muted); font-size: 12.5px; text-align: c
   document.getElementById("title").textContent = D.topic || "ניתוח ISM-MICMAC";
   var nH = D.experts.filter(function (e) { return e.type === "human"; }).length, nA = D.experts.length - nH;
   document.getElementById("subtitle").textContent = N + " גורמים · " + D.experts.length + " משיבים (" + nH + " מומחים, " + nA + " סוכני AI) · הופק " + D.generated;
-  document.getElementById("foot").textContent = "הדוח הופק במערכת ISM-MICMAC Pro · " + D.generated + " · קובץ עצמאי שעובד גם בלי חיבור לאינטרנט";
+  document.getElementById("foot").textContent = "הדוח הופק במערכת ISM-MICMAC Pro · " + D.generated;
 
   /* ---------- tabs ---------- */
   var TABS = [
-    ["summary", "סיכום"], ["hierarchy", "היררכיה"], ["micmac", "MICMAC"],
+    ["intro", "מבוא"], ["summary", "סיכום"], ["hierarchy", "היררכיה"], ["micmac", "MICMAC"],
     ["matrices", "מטריצות"], ["conflicts", "קונפליקטים", D.conflicts.length], ["experts", "משיבים", D.experts.length]
   ];
   var nav = document.getElementById("tabs"), panels = document.getElementById("panels"), renderers = {}, rendered = {};
@@ -420,6 +452,107 @@ footer { margin-top: 40px; color: var(--muted); font-size: 12.5px; text-align: c
 
   function head(p, title, lead) { p.appendChild(el("h2", { text: title })); if (lead) p.appendChild(el("p", { class: "lead", text: lead })); }
   function clsBadge(c) { return el("span", { class: "badge" }, [dotEl(cvar("c-" + c)), CLS[c].he + " · " + CLS[c].en]); }
+
+  /* ---------- intro ---------- */
+  function dur(sec) {
+    if (sec == null) return "לא נמדד";
+    if (sec < 1) return "פחות משנייה";
+    if (sec < 60) return Math.round(sec) + " שניות";
+    var m = Math.floor(sec / 60), r = Math.round(sec % 60);
+    if (m < 60) return m + " דק'" + (r ? " ו-" + r + " שנ'" : "");
+    var h = Math.floor(m / 60);
+    return h + " שע'" + (m % 60 ? " ו-" + (m % 60) + " דק'" : "");
+  }
+  function when(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(iso || "");
+    return m ? m[3] + "/" + m[2] + "/" + m[1] + " " + m[4] + ":" + m[5] : "";
+  }
+  function tile(k, v, h) { return el("div", { class: "card tile" }, [el("div", { class: "k", text: k }), el("div", { class: "v", text: v }), h ? el("div", { class: "h", text: h }) : null]); }
+  function swatch(color) { var s = el("span", { class: "sw" }); s.style.background = color; return s; }
+  renderers.intro = function (p) {
+    var run = D.run || {}, m = D.micmac[method];
+    head(p, "מבוא", "על מה נשאלו המשיבים, אילו גורמים נבחנו, באילו שיטות נותחו התשובות, מי ענה, וכמה עלתה ההרצה.");
+    var st = el("div", { class: "stack" });
+
+    // the problem
+    var prob = el("div", { class: "card" }, [el("h3", { text: "הבעיה הנבחנת" }), el("p", { class: "intro-topic", text: D.topic || "לא הוגדר נושא" })]);
+    if (D.question) prob.appendChild(el("p", { class: "lead", style: "margin:0", text: "שאלת הסקר לכל זוג גורמים: " + D.question.replace("{i}", "i").replace("{j}", "j") }));
+    st.appendChild(prob);
+
+    // factors
+    var fc = el("div", { class: "card" }, [el("h3", { text: "הגורמים שנבחנו (" + N + ")" }),
+      el("p", { class: "lead", style: "margin-bottom:14px", text: "כל זוג גורמים נבחן פעם אחת, כלומר " + D.stats.pairs + " זוגות. ליד כל גורם מופיעים הרמה שלו בהיררכיה והסיווג שלו (" + m.label + ")." })]);
+    var fg = el("div", { class: "factor-grid" });
+    F.forEach(function (f, i) {
+      var r = rowOf(f), c = r ? r.cls : "autonomous";
+      fg.appendChild(el("div", { class: "factor" }, [
+        el("span", { class: "num", text: String(i + 1) }),
+        el("div", { style: "min-width:0" }, [el("div", { class: "name", text: f }),
+          el("div", { class: "meta" }, [dotEl(cvar("c-" + c)), CLS[c].he + " · רמה " + (levelOf[f] || "")])])
+      ]));
+    });
+    fc.appendChild(fg);
+    st.appendChild(fc);
+
+    // methods actually used in this run
+    var methods = [
+      ["ISM", "Interpretive Structural Modeling", "בניית מטריצת SSIM מהתשובות, מטריצת נגישות ראשונית (IRM), סגירה טרנזיטיבית למטריצת נגישות סופית (FRM) וחלוקה לרמות.", D.levels.length + " רמות היררכיה"],
+      ["MICMAC", "Cross-Impact Matrix Multiplication", "סיווג כל גורם לאחד מארבעה רביעים לפי כוח ההשפעה וכוח התלות שלו. חושבו ארבע גרסאות: קלאסית בסף ממוצע ובסף n/2, ועקיפות לפי Godet ולפי Katz.", "ברירת המחדל בדוח: " + D.micmac[D.default_method].label],
+      ["אגרגציה", "Majority rule", "התשובות של כל המשיבים אוחדו לתשובה אחת לכל זוג לפי כלל הרוב. זוג בלי רוב ברור סומן כקונפליקט.", D.conflicts.length ? D.conflicts.length + " קונפליקטים" : "אין קונפליקטים"]
+    ];
+    if (D.conflicts.length) methods.push(["הכרעת AI", "Conflict judge", "מודל שפה קרא את ההצבעות ואת נימוקי המשיבים בכל זוג שנוי במחלוקת, והכריע עם הסבר.", D.conflicts.length + " הכרעות"]);
+    if (nA) methods.push(["סוכני AI", "Simulated experts", "מודלי שפה שמדמים מומחים מתחומים שונים מילאו את אותו שאלון SSIM שמילאו המומחים האנושיים.", nA + " סוכנים"]);
+    var mc = el("div", { class: "card" }, [el("h3", { text: "שיטות הניתוח שבוצעו" })]);
+    var mg = el("div", { class: "method-grid" });
+    methods.forEach(function (x) {
+      mg.appendChild(el("div", { class: "method" }, [
+        el("div", { class: "mh" }, [el("b", { text: x[0] }), el("span", { class: "en", text: x[1] })]),
+        el("p", { text: x[2] }),
+        el("span", { class: "badge" }, [el("span", { class: "dot", style: "background:var(--good)" }), x[3]])
+      ]));
+    });
+    mc.appendChild(mg);
+    st.appendChild(mc);
+
+    // respondents
+    var rc = el("div", { class: "card" }, [el("h3", { text: "מי ענה על השאלון" })]);
+    var total = D.experts.length || 1;
+    var bar = el("div", { class: "bar", style: "height:14px;margin:4px 0 10px", role: "img", "aria-label": nH + " מומחים אנושיים, " + nA + " סוכני AI" });
+    if (nH) { var bh = el("i"); bh.style.width = (nH / total * 100) + "%"; bh.style.background = "var(--c-driving)"; bar.appendChild(bh); }
+    if (nA) { var ba = el("i"); ba.style.width = (nA / total * 100) + "%"; ba.style.background = "var(--c-linkage)"; bar.appendChild(ba); }
+    rc.appendChild(bar);
+    rc.appendChild(el("div", { class: "legend" }, [
+      el("span", null, [swatch("var(--c-driving)"), "מומחים אנושיים: " + nH + " (" + pct(nH, D.experts.length) + "%)"]),
+      el("span", null, [swatch("var(--c-linkage)"), "סוכני AI: " + nA + " (" + pct(nA, D.experts.length) + "%)"])
+    ]));
+    var rg = el("div", { class: "grid g-2", style: "gap:12px" });
+    [["human", "מומחים אנושיים"], ["ai", "סוכני AI"]].forEach(function (t) {
+      var list = D.experts.filter(function (e) { return e.type === t[0]; });
+      if (!list.length) return;
+      var box = el("div", null, [el("div", { class: "k", style: "color:var(--ink-2);font-size:13px;margin-bottom:6px", text: t[1] })]);
+      var cc = el("div", { class: "chips" });
+      list.forEach(function (e) { cc.appendChild(el("span", { class: "chip", title: e.role, text: e.name + (e.role && e.name.indexOf(e.role) < 0 ? " · " + e.role : "") })); });
+      box.appendChild(cc); rg.appendChild(box);
+    });
+    rc.appendChild(rg);
+    if (run.first_response) rc.appendChild(el("p", { class: "lead", style: "margin:12px 0 0;font-size:13.5px",
+      text: run.first_response === run.last_response ? "התשובות התקבלו ב-" + when(run.first_response) + "." : "התשובות התקבלו בין " + when(run.first_response) + " לבין " + when(run.last_response) + "." }));
+    st.appendChild(rc);
+
+    // cost and time
+    var cc2 = el("div", { class: "card" }, [el("h3", { text: "עלות וזמן ההרצה" })]);
+    var tg = el("div", { class: "grid g-tiles" });
+    var cost = run.cost || 0, tin = run.input_tokens || 0, tout = run.output_tokens || 0;
+    tg.appendChild(tile("עלות המודל בתשלום", "$" + cost.toFixed(cost > 0 && cost < 0.01 ? 4 : 2), run.calls ? run.calls + " קריאות למודל" : "לא היו קריאות"));
+    tg.appendChild(tile("זמן תגובה מצטבר של המודל", run.calls ? dur(run.ai_seconds) : "0", run.calls ? "סכום זמני התגובה של כל הקריאות" : ""));
+    tg.appendChild(tile("זמן הניתוח", dur(run.analysis_seconds), D.conflicts.length ? "כולל הכרעת הקונפליקטים" : "חישוב המטריצות והסיווג"));
+    tg.appendChild(tile("טוקנים", (tin + tout).toLocaleString("he-IL"), tin.toLocaleString("he-IL") + " קלט · " + tout.toLocaleString("he-IL") + " פלט"));
+    cc2.appendChild(tg);
+    cc2.appendChild(el("div", { class: "note info", style: "margin-top:14px" }, [el("span", { class: "ic", text: "i" }),
+      el("div", { text: "העלות והזמנים נמדדו בסשן שבו הופק הדוח, ורק עבור המודל בתשלום" + (run.provider ? " (" + run.provider + ")" : "") + ". קריאות למודל החינמי אינן מתומחרות." })]));
+    st.appendChild(cc2);
+    p.appendChild(st);
+  };
 
   /* ---------- summary ---------- */
   renderers.summary = function (p) {
@@ -572,7 +705,8 @@ footer { margin-top: 40px; color: var(--muted); font-size: 12.5px; text-align: c
         method = k;
         Array.prototype.forEach.call(seg.children, function (c) { c.setAttribute("aria-pressed", c === b ? "true" : "false"); });
         drawMicmac();
-        rendered.summary = false; rendered.hierarchy = false;
+        rendered.summary = false; rendered.hierarchy = false; rendered.intro = false;
+        document.getElementById("p-intro").innerHTML = "";
         var sp = document.getElementById("p-summary"); sp.innerHTML = "";
         var hp = document.getElementById("p-hierarchy"); hp.innerHTML = ""; nodeEls = {}; hierBox = null; pinned = null;
       });
@@ -843,8 +977,8 @@ footer { margin-top: 40px; color: var(--muted); font-size: 12.5px; text-align: c
   };
 
   var start = (location.hash || "").slice(1);
-  renderers.summary(document.getElementById("p-summary")); rendered.summary = true;
-  if (start && start !== "summary" && renderers[start]) activate(start);
+  renderers.intro(document.getElementById("p-intro")); rendered.intro = true;
+  if (start && start !== "intro" && renderers[start]) activate(start);
   window.addEventListener("beforeprint", function () { TABS.forEach(function (t) { if (!rendered[t[0]]) { renderers[t[0]](document.getElementById("p-" + t[0])); rendered[t[0]] = true; } }); });
 })();
 </script>

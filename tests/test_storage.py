@@ -26,6 +26,7 @@ def test_experts_roundtrip_and_justifications(tmp_path):
     data, justs, cites = storage.load_experts(db)
     assert list(data) == ['Exp_1', 'Synth_1']
     assert data['Exp_1']['responses'] == {'A': {'B': 'V'}}
+    assert data['Exp_1']['created_at'][:2] == '20'  # חותמת זמן ISO של שליחת התשובות
     assert justs == {('A', 'B'): [{'expert': 'דנה', 'symbol': 'V', 'text': 'נימוק'}]}
     assert cites == {'Synth_1': [{'href': 'x'}]}
 

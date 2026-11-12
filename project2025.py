@@ -579,8 +579,10 @@ def invalidate_results():
 
 def analyze_and_store(ssim_init, conflicts):
     """פותר קונפליקטים, מחשב את כל המטריצות ושומר את התוצאות בסשן יחד עם אוסף המומחים שעליו חושבו."""
+    started = time.perf_counter()
     _, irm, frm, micmac = solve_conflicts_and_finalize(ssim_init, conflicts)
     results = build_analysis_results(irm, frm, micmac)
+    results['elapsed_s'] = time.perf_counter() - started  # כולל את הכרעת הקונפליקטים על ידי ה-AI
     results['expert_ids'] = frozenset(st.session_state['EXPERT_DATA'])
     st.session_state['RESULTS'] = results
 
@@ -1851,6 +1853,7 @@ def screen_admin_dashboard():
                 ssim_init=st.session_state.get('SSIM_INIT'), ssim_final=st.session_state.get('FINAL_SSIM'),
                 ai_log=st.session_state['AI_LOG'], justifications=st.session_state['JUSTIFICATIONS'],
                 topic=st.session_state.get('TOPIC', ''), question=st.session_state.get('GENERIC_QUESTION', ''),
+                usage=st.session_state['AI_USAGE'], provider=ai_provider_label(),
             )
             st.download_button(
                 label="🌐 הורד דוח HTML אינטראקטיבי (כל התוצאות הסופיות)",

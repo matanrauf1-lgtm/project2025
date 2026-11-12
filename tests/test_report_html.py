@@ -60,3 +60,20 @@ def test_html_is_self_contained_and_round_trips():
     assert not re.search(r'<(script|link)[^>]+(src|href)="https?:', html)  # עובד בלי אינטרנט
     assert _embedded(html)['topic'] == 'בטיחות </script> בדרכים'  # טקסט חופשי לא סוגר את תגית הנתונים
     assert '&lt;/script&gt;' in html.split('<style>')[0]  # כותרת הדף מוברחת
+
+
+def test_run_cost_time_and_collection_window():
+    usage = {'calls': 3, 'input_tokens': 1200, 'output_tokens': 300, 'cost': 0.0123,
+             'history': [{'שניות': 2.5}, {'שניות': 1.5}, {'שניות': None}]}
+    experts = {
+        'e1': {'name': 'א', 'role': '', 'responses': {}, 'created_at': '2026-11-10T09:00:00'},
+        'e2': {'name': 'ב', 'role': '', 'responses': {}, 'created_at': '2026-11-12T18:30:00'},
+    }
+    results = _analysis()
+    results['elapsed_s'] = 4.2
+    run = collect_report_data(FACTORS, experts, results, usage=usage, provider='Anthropic')['run']
+    assert run['calls'] == 3 and run['cost'] == 0.0123 and run['ai_seconds'] == 4.0
+    assert run['analysis_seconds'] == 4.2
+    assert (run['first_response'], run['last_response']) == ('2026-11-10T09:00:00', '2026-11-12T18:30:00')
+    html = build_html_report(collect_report_data(FACTORS, experts, results))
+    assert '["intro", "מבוא"]' in html and 'קובץ עצמאי' not in html
